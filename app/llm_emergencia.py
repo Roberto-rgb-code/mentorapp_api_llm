@@ -1,136 +1,160 @@
 # app/llm_emergencia.py
 import os
 import json
-import time
-import httpx
-import asyncio # Necesario para asyncio.sleep
-from typing import Dict, Any, List
+import asyncio
+from typing import Dict, Any
+from fastapi import HTTPException
 
-# Define la URL base del API de Gemini
-GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-# Obtén la API Key de una variable de entorno o déjala vacía si Canvas la inyecta
-API_KEY = os.getenv("GEMINI_API_KEY", "") # Deja vacío si Canvas la inyecta automáticamente
-MODEL_NAME = "gemini-2.5-flash-preview-05-20" # Modelo de Gemini para análisis
+# OpenAI SDK (pip install openai>=1.40.0)
+from openai import OpenAI
 
-# Esquema de respuesta esperado del LLM para diagnóstico de emergencia
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-mini")
+
+# === Esquema EXACTO que espera tu frontend de emergencia ===
+# {
+#   diagnostico_rapido: string,
+#   acciones_inmediatas: string[],
+#   riesgo_general: "bajo" | "moderado" | "alto" | "critico",
+#   recomendaciones_clave: string[]
+# }
 RESPONSE_SCHEMA = {
-    "type": "OBJECT",
+    "type": "object",
     "properties": {
-        "situacion_critica": {"type": "STRING", "description": "Descripción de la situación de emergencia identificada."},
+        "diagnostico_rapido": {
+            "type": "string",
+            "description": "Resumen ejecutivo y directo de la situación de emergencia detectada."
+        },
         "acciones_inmediatas": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "Lista de acciones urgentes a tomar."
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Lista priorizada de acciones urgentes (hoy/mañana)."
         },
-        "impacto_potencial": {
-            "type": "STRING",
-            "description": "Descripción del impacto potencial si no se actúa rápidamente."
+        "riesgo_general": {
+            "type": "string",
+            "enum": ["bajo", "moderado", "alto", "critico"],
+            "description": "Nivel de riesgo global estimado."
         },
-        "recomendaciones_corto_plazo": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "Recomendaciones para estabilizar la situación en el corto plazo."
-        },
-        "contactos_clave_sugeridos": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "Tipos de profesionales o entidades a contactar en la emergencia (ej. abogado, contador, especialista en crisis)."
+        "recomendaciones_clave": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Recomendaciones clave para estabilizar en el corto plazo."
         }
     },
     "required": [
-        "situacion_critica",
+        "diagnostico_rapido",
         "acciones_inmediatas",
-        "impacto_potencial",
-        "recomendaciones_corto_plazo",
-        "contactos_clave_sugeridos"
-    ]
+        "riesgo_general",
+        "recomendaciones_clave"
+    ],
+    "additionalProperties": False
 }
 
-async def call_gemini_api_with_backoff(
-    payload: Dict[str, Any],
-    model_name: str,
-    api_key: str,
-    max_retries: int = 5,
-    initial_delay: float = 1.0
-) -> Dict[str, Any]:
-    """
-    Realiza una llamada al API de Gemini con reintentos y retroceso exponencial.
-    """
-    url = f"{GEMINI_API_BASE_URL}/{model_name}:generateContent?key={api_key}"
-    headers = {'Content-Type': 'application/json'}
-
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                response.raise_for_status() # Lanza una excepción para códigos de estado HTTP 4xx/5xx
-                return response.json()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429 and attempt < max_retries - 1:
-                delay = initial_delay * (2 ** attempt)
-                print(f"Demasiadas solicitudes (429). Reintentando en {delay:.2f} segundos...")
-                await asyncio.sleep(delay)
-            else:
-                print(f"Error HTTP: {e.response.status_code} - {e.response.text}")
-                raise
-        except httpx.RequestError as e:
-            print(f"Error de solicitud: {e}")
-            if attempt < max_retries - 1:
-                delay = initial_delay * (2 ** attempt)
-                print(f"Error de red. Reintentando en {delay:.2f} segundos...")
-                await asyncio.sleep(delay)
-            else:
-                raise
-        except Exception as e:
-            print(f"Error inesperado: {e}")
-            raise
-    raise Exception("Fallo en la llamada al API de Gemini después de varios reintentos.")
-
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 async def analizar_diagnostico_emergencia(diagnostico_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Analiza los datos de un diagnóstico empresarial de emergencia utilizando un LLM.
-    Se espera que 'diagnostico_data' contenga información sobre una crisis o situación urgente.
+    Analiza un diagnóstico de EMERGENCIA con OpenAI (Responses + Structured Outputs)
+    y devuelve el JSON EXACTO que consume el frontend.
     """
-    prompt = (
-        "Eres un consultor de crisis empresarial. Recibes un diagnóstico de una situación de emergencia. "
-        "Tu objetivo es identificar rápidamente la situación crítica, proponer acciones inmediatas, "
-        "describir el impacto potencial si no se actúa, dar recomendaciones a corto plazo para estabilizar "
-        "la situación y sugerir tipos de contactos clave a buscar (ej. abogado, especialista en crisis, etc.).\n\n"
-        "Aquí están los datos del diagnóstico de emergencia:\n"
+    # Fallback DEMO si no hay API key (útil en local)
+    if not OPENAI_API_KEY:
+        return {
+            "diagnostico_rapido": "Demo local sin OPENAI_API_KEY. Empresa en estrés de liquidez y caída de ventas.",
+            "acciones_inmediatas": [
+                "Congelar gastos no esenciales 14 días",
+                "Priorizar cobros críticos y renegociar pagos",
+                "Comunicar a clientes clave un plan de continuidad",
+            ],
+            "riesgo_general": "alto",
+            "recomendaciones_clave": [
+                "Proteger flujo de caja semanal",
+                "Ajustar capacidad operativa a demanda actual",
+                "Definir plan comercial de recuperación 30-60 días"
+            ]
+        }
+
+    user_prompt = (
+        "Eres un consultor de crisis empresarial. Recibes datos de un diagnóstico de EMERGENCIA.\n"
+        "Tu objetivo: entregar un diagnóstico muy breve y accionable, manteniendo foco en medidas urgentes.\n\n"
+        "Devuelve SOLO JSON cumpliendo estrictamente el esquema:\n"
+        "- diagnostico_rapido: resumen ejecutivo en 4–6 líneas, tono claro y directo.\n"
+        "- acciones_inmediatas: 4–8 acciones priorizadas para las próximas 24–72 horas.\n"
+        "- riesgo_general: uno de ['bajo','moderado','alto','critico'].\n"
+        "- recomendaciones_clave: 4–8 recomendaciones de estabilización para 2–4 semanas.\n\n"
+        "Datos del diagnóstico de emergencia:\n"
         f"{json.dumps(diagnostico_data, ensure_ascii=False, indent=2)}\n\n"
-        "Por favor, devuelve la respuesta en formato JSON siguiendo el esquema proporcionado."
+        "Responde EXCLUSIVAMENTE con JSON válido que cumpla el esquema."
     )
 
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": prompt}]
-            }
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": RESPONSE_SCHEMA
-        }
-    }
-
     try:
-        response_json = await call_gemini_api_with_backoff(payload, MODEL_NAME, API_KEY)
-        if response_json and response_json.get("candidates"):
-            candidate = response_json["candidates"][0]
-            if candidate.get("content") and candidate["content"].get("parts"):
-                text_part = candidate["content"]["parts"][0].get("text")
-                if text_part:
-                    return json.loads(text_part)
-        raise Exception("Estructura de respuesta inesperada del LLM.")
-    except Exception as e:
-        print(f"Error al analizar el diagnóstico de emergencia con LLM: {e}")
-        return {
-            "situacion_critica": "No se pudo generar el análisis de emergencia debido a un error.",
-            "acciones_inmediatas": ["Error en el análisis de IA."],
-            "impacto_potencial": "No se pudo determinar el impacto potencial.",
-            "recomendaciones_corto_plazo": ["Verifica la configuración de la API o intenta de nuevo más tarde."],
-            "contactos_clave_sugeridos": ["Error en el análisis de IA."]
-        }
+        resp = await _create_response_async(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": "Responde solo con JSON válido que cumpla el esquema."},
+                {"role": "user", "content": user_prompt},
+            ],
+            json_schema=RESPONSE_SCHEMA,
+        )
 
+        if isinstance(resp, dict):
+            return resp
+
+        if isinstance(resp, str):
+            return json.loads(resp)
+
+        text = str(resp)
+        return json.loads(text)
+
+    except Exception as e:
+        # No dejes reventar el flujo del frontend; entrega un payload útil.
+        raise HTTPException(
+            status_code=502,
+            detail=f"Fallo con OpenAI ({MODEL_NAME}): {str(e)}"
+        )
+
+# —— Helpers (idéntico enfoque al módulo 'profundo') ——
+async def _create_response_async(model: str, messages, json_schema: dict):
+    """
+    Llama al Responses API con response_format=json_schema.
+    Nota: el SDK Python de OpenAI no es nativamente async; usamos hilo con asyncio.to_thread.
+    """
+    def _call():
+        try:
+            if hasattr(client, "responses"):
+                r = client.responses.create(
+                    model=model,
+                    input=messages,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "DiagnosticoEmergenciaSchema",
+                            "schema": json_schema,
+                            "strict": True
+                        }
+                    },
+                )
+                # Intentar parseo estructurado directo:
+                try:
+                    return r.output_parsed
+                except Exception:
+                    # Fallback: extraer texto
+                    if getattr(r, "output", None) and getattr(r.output, "content", None):
+                        c0 = r.output.content[0]
+                        text = getattr(c0, "text", None)
+                        return text if text is not None else getattr(r, "output_text", None)
+                    return getattr(r, "output_text", None)
+
+            # Fallback a Chat Completions en JSON mode (menos estricto)
+            completion = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+                temperature=0.2,
+            )
+            return completion.choices[0].message.content
+
+        except Exception as e:
+            raise e
+
+    return await asyncio.to_thread(_call)

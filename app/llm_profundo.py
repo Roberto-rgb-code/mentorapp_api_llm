@@ -1,142 +1,483 @@
 # app/llm_profundo.py
 import os
 import json
-import time
-import httpx
-import asyncio # Necesario para asyncio.sleep
-from typing import Dict, Any, List
+import asyncio
+import logging
+from typing import Dict, Any, List, Tuple, Optional
+from fastapi import HTTPException
+from openai import OpenAI
 
-# Define la URL base del API de Gemini
-GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-# Obtén la API Key de una variable de entorno o déjala vacía si Canvas la inyecta
-API_KEY = os.getenv("GEMINI_API_KEY", "") # Deja vacío si Canvas la inyecta automáticamente
-MODEL_NAME = "gemini-2.5-flash-preview-05-20" # Modelo de Gemini para análisis
+logger = logging.getLogger("diag_profundo")
 
-# Esquema de respuesta esperado del LLM para diagnóstico profundo
-# Puedes personalizar este esquema según las necesidades de tu análisis profundo
-RESPONSE_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "analisis_detallado": {"type": "STRING", "description": "Análisis exhaustivo de los datos proporcionados."},
-        "oportunidades_estrategicas": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "Lista de oportunidades estratégicas a largo plazo."
-        },
-        "riesgos_identificados": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "Lista de riesgos potenciales y su impacto."
-        },
-        "plan_accion_sugerido": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "Pasos sugeridos para un plan de acción detallado."
-        },
-        "indicadores_clave_rendimiento": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "KPIs recomendados para monitorear el progreso."
-        }
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# Usa un modelo disponible en tu cuenta (p.ej. "gpt-4o-mini", "gpt-4.1-mini", etc.)
+MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini")
+
+# Si DIAG_DEMO_ON_ERROR=1, ante error con OpenAI respondemos demo en lugar de 502 (útil en dev)
+DEMO_ON_ERROR = os.getenv("DIAG_DEMO_ON_ERROR", "1") == "1"
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# ---------------------------
+# Configuración de dominios
+# ---------------------------
+
+# Palabras/expresiones que bajan el score si aparecen en textos abiertos del dominio.
+KW_FIN = ["flujo de caja", "liquidez", "morosidad", "deuda", "pérdida", "perdida", "quiebra", "sin presupuesto"]
+KW_RH  = ["conflicto", "rotación", "burnout", "clima", "falta de capacitación", "ausentismo"]
+KW_OP  = ["cuello de botella", "reproceso", "mermas", "retraso", "ineficiencia", "sin procesos", "sin documentación"]
+KW_MV  = ["baja conversión", "sin canal", "poca demanda", "bajo reconocimiento", "sin plan de marketing"]
+KW_DG  = ["sin plan", "sin objetivos", "reactivo", "falta de dirección", "sin estrategia"]
+KW_LCS = ["proveedor incumple", "costos altos", "retraso entregas", "sin inventario", "faltantes"]
+KW_INN = ["no innova", "miedo al cambio", "desactualizado", "sin tecnología"]
+
+DOMAIN_CONFIG = {
+    "finanzas": {
+        "label": "Finanzas y Administración",
+        "likert_fields": [
+            "fa_margenGanancia",
+            "fa_estadosFinancierosActualizados",
+            "fa_presupuestosAnuales",
+            "fa_liquidezCubreObligaciones",
+            "fa_gastosControlados",
+            "fa_indicadoresFinancieros",
+            "fa_analizanEstadosFinancieros",
+            "fa_herramientasSoftwareFinanciero",
+            "fa_situacionFinancieraGeneral",
+        ],
+        "text_fields": ["fa_causaProblemasFinancieros", "fa_porQueNoSeAnalizan"],
+        "keywords": KW_FIN,
     },
-    "required": [
-        "analisis_detallado",
-        "oportunidades_estrategicas",
-        "riesgos_identificados",
-        "plan_accion_sugerido",
-        "indicadores_clave_rendimiento"
-    ]
+    "rrhh": {
+        "label": "Recursos Humanos",
+        "likert_fields": [
+            "rh_organigramaFuncionesClaras",
+            "rh_personalCapacitado",
+            "rh_climaLaboralFavoreceProductividad",
+            "rh_programasMotivacion",
+            "rh_evaluacionesDesempeno",
+            "rh_indicadoresRotacionPersonal",
+            "rh_liderazgoJefesIntermedios",
+        ],
+        "text_fields": ["rh_causaClimaLaboralComplejo", "rh_cuantasPersonasTrabajan"],
+        "keywords": KW_RH,
+    },
+    "operaciones": {
+        "label": "Operaciones / Servicio",
+        "likert_fields": [
+            "op_capacidadProductivaCubreDemanda",
+            "op_procesosDocumentados",
+            "op_estandaresCalidadCumplen",
+            "op_controlesErrores",
+            "op_tiemposEntregaCumplen",
+            "op_eficienciaProcesosOptima",
+            "op_personalConoceProcedimientos",
+            "op_indicadoresOperativos",
+        ],
+        "text_fields": ["op_porQueNoCubreDemanda", "op_porQueNoCumplen", "op_porQueNoConocen"],
+        "keywords": KW_OP,
+    },
+    "marketing_ventas": {
+        "label": "Marketing y Ventas",
+        "likert_fields": [
+            "mv_clienteIdealNecesidades",
+            "mv_planEstrategiasMarketing",
+            "mv_marcaReconocida",
+            "mv_estudiosSatisfaccionCliente",
+            "mv_indicadoresDesempenoComercial",
+            "mv_equipoVentasCapacitado",
+            "mv_politicasDescuentosPromociones",
+        ],
+        "text_fields": ["mv_impactoCanalesVenta", "mv_canalesVentaActuales", "mv_porQueNoHaceEstudios"],
+        "keywords": KW_MV,
+    },
+    "direccion": {
+        "label": "Dirección y Planeación",
+        "likert_fields": [
+            "dg_misionVisionValores",
+            "dg_objetivosClaros",
+            "dg_planEstrategicoDocumentado",
+            "dg_revisionAvancePlan",
+            "dg_factoresExternos",
+            "dg_capacidadAdaptacion",
+            "dg_colaboradoresParticipan",
+        ],
+        "text_fields": ["dg_impideCumplirMetas", "dg_comoSeTomanDecisiones", "dg_porQueNoParticipan"],
+        "keywords": KW_DG,
+    },
+    "logistica": {
+        "label": "Logística y Cadena de Suministro",
+        "likert_fields": [
+            "lcs_proveedoresCumplen",
+            "lcs_entregasClientesPuntuales",
+            "lcs_costosLogisticosCompetitivos",
+            "lcs_poderNegociacionProveedores",
+            "lcs_indicadoresLogisticos",
+        ],
+        "text_fields": ["lcs_problemasLogisticosPunto"],
+        "keywords": KW_LCS,
+    },
+    "innovacion": {
+        "label": "Innovación",
+        "likert_fields": [
+            "ci_mejoranProductosServicios",
+            "ci_recogeImplementaIdeasPersonal",
+            "ci_invierteTecnologiaInnovacion",
+            "ci_dispuestoAsumirRiesgos",
+            "ci_protegePropiedadIntelectual",
+            "ci_fomentaCulturaCambio",
+        ],
+        "text_fields": ["ci_porQueNoInnova"],
+        "keywords": KW_INN,
+    },
 }
 
-async def call_gemini_api_with_backoff(
-    payload: Dict[str, Any],
-    model_name: str,
-    api_key: str,
-    max_retries: int = 5,
-    initial_delay: float = 1.0
-) -> Dict[str, Any]:
-    """
-    Realiza una llamada al API de Gemini con reintentos y retroceso exponencial.
-    """
-    url = f"{GEMINI_API_BASE_URL}/{model_name}:generateContent?key={api_key}"
-    headers = {'Content-Type': 'application/json'}
 
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client: # Aumentar el timeout para análisis profundos
-                response = await client.post(url, headers=headers, json=payload)
-                response.raise_for_status() # Lanza una excepción para códigos de estado HTTP 4xx/5xx
-                return response.json()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429 and attempt < max_retries - 1:
-                delay = initial_delay * (2 ** attempt)
-                print(f"Demasiadas solicitudes (429). Reintentando en {delay:.2f} segundos...")
-                await asyncio.sleep(delay)
-            else:
-                print(f"Error HTTP: {e.response.status_code} - {e.response.text}")
-                raise
-        except httpx.RequestError as e:
-            print(f"Error de solicitud: {e}")
-            if attempt < max_retries - 1:
-                delay = initial_delay * (2 ** attempt)
-                print(f"Error de red. Reintentando en {delay:.2f} segundos...")
-                await asyncio.sleep(delay)
-            else:
-                raise
-        except Exception as e:
-            print(f"Error inesperado: {e}")
-            raise
-    raise Exception("Fallo en la llamada al API de Gemini después de varios reintentos.")
+# ---------------------------
+# Utilidades de scoring
+# ---------------------------
 
+def _likert_to_num(v: Any) -> Optional[float]:
+    """
+    Convierte valores tipo "1".."5" o int 1..5 a float. Devuelve None si no hay valor.
+    """
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        if 1 <= float(v) <= 5:
+            return float(v)
+        return None
+    if isinstance(v, str):
+        v = v.strip()
+        if v.isdigit():
+            f = float(v)
+            if 1 <= f <= 5:
+                return f
+    return None
+
+
+def _text_contains_any(text: str, kws: List[str]) -> bool:
+    t = (text or "").lower()
+    return any(k.lower() in t for k in kws)
+
+
+def _severity_from_score(score: float) -> str:
+    if score <= 2.0:
+        return "Crítico"
+    if score <= 2.5:
+        return "Alto"
+    if score <= 3.5:
+        return "Medio"
+    return "Bajo"
+
+
+def _priority_from_severity(sev: str) -> str:
+    return {"Crítico": "P1", "Alto": "P1", "Medio": "P2"}.get(sev, "P3")
+
+
+def _compute_domain_score(data: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[float, List[str], int]:
+    """
+    Calcula score promedio (1-5) a partir de likerts presentes.
+    Penaliza -0.5 si encuentra palabras clave negativas en los textos del dominio.
+    Devuelve (score_clamped, evidencias_texto, n_likerts_utilizados).
+    """
+    lik_vals: List[float] = []
+    for f in cfg["likert_fields"]:
+        val = _likert_to_num(data.get(f))
+        if val is not None:
+            lik_vals.append(val)
+
+    evidencias: List[str] = []
+    neg_hit = False
+
+    for tf in cfg["text_fields"]:
+        tv = str(data.get(tf) or "")
+        if tv:
+            evidencias.append(f"{tf}: {tv[:140]}{'…' if len(tv) > 140 else ''}")
+            if not neg_hit and _text_contains_any(tv, cfg["keywords"]):
+                neg_hit = True
+
+    if not lik_vals:
+        # Sin likerts, base neutra 3.0 y aplica penalización si hay señales negativas
+        base = 3.0
+    else:
+        base = sum(lik_vals) / len(lik_vals)
+
+    if neg_hit:
+        base -= 0.5
+
+    base = max(1.0, min(5.0, base))
+    return base, evidencias, len(lik_vals)
+
+
+def _compute_domains(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Construye dict de dominios con score, severidad, prioridad y evidencias.
+    """
+    out = {}
+    for dom_key, cfg in DOMAIN_CONFIG.items():
+        score, evid, nlik = _compute_domain_score(data, cfg)
+        sev = _severity_from_score(score)
+        out[dom_key] = {
+            "dominio": dom_key,
+            "nombre": cfg["label"],
+            "score": round(score, 2),
+            "severidad": sev,
+            "prioridad": _priority_from_severity(sev),
+            "evidencias": evid,
+            "likerts_utilizados": nlik,
+        }
+    return out
+
+
+# ---------------------------
+# DEMO / Fallback plantillas
+# ---------------------------
+
+_DEMO_TOP = {
+    "analisis_detallado": "Diagnóstico generado en modo DEMO (sin clave OpenAI o por error).",
+    "oportunidades_estrategicas": [
+        "Estandarizar procesos críticos con tableros de control",
+        "Fortalecer flujo de caja y disciplina presupuestal",
+        "Profesionalizar gestión de talento y liderazgo intermedio",
+    ],
+    "riesgos_identificados": [
+        "Dependencia de pocos clientes/proveedores",
+        "Tensión de liquidez por falta de presupuesto y cobranza reactiva",
+    ],
+    "plan_accion_sugerido": [
+        "Implementar presupuesto operativo y flujo semanal (30 días)",
+        "Formalizar evaluación de desempeño y feedback trimestral (60 días)",
+        "Definir KPIs y rutinas de revisión mensual (90 días)",
+    ],
+    "indicadores_clave_rendimiento": ["Margen bruto", "Ciclo de caja", "Rotación de personal", "NPS", "OTIF"],
+}
+
+
+def _quick_template_by_domain(sev: str, label: str) -> Dict[str, Any]:
+    """Crea un bloque consultivo básico por dominio para casos demo o fallback."""
+    pref = "Prioridad alta" if sev in ("Crítico", "Alto") else "Prioridad media"
+    return {
+        "diagnostico": f"{label}: {pref}. Se observan brechas que requieren intervención inmediata para estabilizar resultados.",
+        "causas_raiz": [
+            "Falta de estandarización y rutinas de control",
+            "Datos incompletos para decidir",
+            "Roles/propietarios difusos sobre los procesos clave",
+        ],
+        "recomendaciones_30_60_90": {
+            "30": ["Definir objetivos claros y responsables", "Establecer tablero mínimo de control"],
+            "60": ["Documentar procesos críticos y capacitar al equipo", "Reuniones de seguimiento quincenal"],
+            "90": ["Medir impacto y ajustar metas trimestrales", "Escalar mejores prácticas"],
+        },
+        "kpis": [
+            {"nombre": "Cumplimiento de metas", "meta": "≥ 85% mensual"},
+            {"nombre": "Tiempo de ciclo", "meta": "−20% en 90 días"},
+        ],
+        "riesgos": [
+            {"riesgo": "Falta de adopción", "mitigacion": "Acompañamiento con responsables y quick wins tempranos"}
+        ],
+        "quick_wins": ["Checklist operativo semanal", "Hitos quincenales con tablero visible"],
+    }
+
+
+def _build_rule_based_structure(domains: Dict[str, Any]) -> Dict[str, Any]:
+    """Estructura consultiva basada en reglas para todos los dominios (fallback/demo)."""
+    tabla = []
+    detail = {}
+    for k, d in domains.items():
+        tabla.append({
+            "dominio": k,
+            "nombre": d["nombre"],
+            "score": d["score"],
+            "severidad": d["severidad"],
+            "prioridad": d["prioridad"],
+        })
+        detail[k] = _quick_template_by_domain(d["severidad"], d["nombre"])
+
+        # Ajustes de KPIs según dominio (ligera personalización)
+        if k == "finanzas":
+            detail[k]["kpis"] = [
+                {"nombre": "Ciclo de caja", "meta": "≤ 45 días"},
+                {"nombre": "Margen bruto", "meta": "≥ 40%"},
+            ]
+        if k == "rrhh":
+            detail[k]["kpis"] = [
+                {"nombre": "Rotación anualizada", "meta": "≤ 12%"},
+                {"nombre": "eNPS", "meta": "≥ 20"},
+            ]
+        if k == "operaciones":
+            detail[k]["kpis"] = [
+                {"nombre": "OTIF", "meta": "≥ 95%"},
+                {"nombre": "Productividad", "meta": "+15% en 90 días"},
+            ]
+
+    tabla.sort(key=lambda x: {"P1": 0, "P2": 1, "P3": 2}[x["prioridad"]])
+    return {
+        "resumen_ejecutivo": "Se priorizan los dominios con severidad Crítico/Alto. Se propone un plan 30-60-90 con KPIs claros.",
+        "tabla_dominios": tabla,
+        "dominios": detail,
+    }
+
+
+# ---------------------------
+# Saneado de salida
+# ---------------------------
+
+def _sanitize_output(obj: Dict[str, Any], fallback_domains: Dict[str, Any]) -> Dict[str, Any]:
+    """Garantiza claves mínimas y conserva estructura consultiva si existe; si falta, la genera por reglas."""
+    def S(x): return x if isinstance(x, str) else ""
+    def A(x): return x if isinstance(x, list) and all(isinstance(i, str) for i in x) else []
+
+    out = {
+        "analisis_detallado": S(obj.get("analisis_detallado")),
+        "oportunidades_estrategicas": A(obj.get("oportunidades_estrategicas")),
+        "riesgos_identificados": A(obj.get("riesgos_identificados")),
+        "plan_accion_sugerido": A(obj.get("plan_accion_sugerido")),
+        "indicadores_clave_rendimiento": A(obj.get("indicadores_clave_rendimiento")),
+    }
+
+    # Relleno mínimo para no romper UI
+    if not out["analisis_detallado"]:
+        out["analisis_detallado"] = _DEMO_TOP["analisis_detallado"]
+    if not out["oportunidades_estrategicas"]:
+        out["oportunidades_estrategicas"] = _DEMO_TOP["oportunidades_estrategicas"]
+    if not out["riesgos_identificados"]:
+        out["riesgos_identificados"] = _DEMO_TOP["riesgos_identificados"]
+    if not out["plan_accion_sugerido"]:
+        out["plan_accion_sugerido"] = _DEMO_TOP["plan_accion_sugerido"]
+    if not out["indicadores_clave_rendimiento"]:
+        out["indicadores_clave_rendimiento"] = _DEMO_TOP["indicadores_clave_rendimiento"]
+
+    # Estructura consultiva ampliada
+    ec = obj.get("estructura_consultiva")
+    if isinstance(ec, dict):
+        out["estructura_consultiva"] = ec
+    else:
+        out["estructura_consultiva"] = _build_rule_based_structure(fallback_domains)
+
+    return out
+
+
+# ---------------------------
+# Prompt y llamada al LLM
+# ---------------------------
+
+def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any]) -> str:
+    """
+    Prepara prompt con foco en dominios de prioridad P1/P2. Se pide voz de consultor senior y salida JSON.
+    """
+    # Selecciona dominios a analizar con LLM (al menos P1 y P2)
+    activos = [v for v in domains.values() if v["prioridad"] in ("P1", "P2")]
+    if not activos:
+        # Si todo es P3, toma los 2 peores scores
+        activos = sorted(domains.values(), key=lambda x: x["score"])[:2]
+
+    resumen_tabla = [
+        {
+            "dominio": d["dominio"],
+            "nombre": d["nombre"],
+            "score": d["score"],
+            "severidad": d["severidad"],
+            "prioridad": d["prioridad"],
+            "evidencias": d["evidencias"],
+        }
+        for d in activos
+    ]
+
+    # Reducimos datos de entrada solo a campos relevantes para los dominios activos
+    campos_relevantes = set()
+    for d in activos:
+        cfg = DOMAIN_CONFIG[d["dominio"]]
+        for k in cfg["likert_fields"] + cfg["text_fields"]:
+            campos_relevantes.add(k)
+    subset = {k: diagnostico_data.get(k) for k in sorted(list(campos_relevantes))}
+
+    instrucciones = (
+        "Eres un CONSULTOR SENIOR. Redacta con precisión, foco y priorización.\n"
+        "Genera un JSON con las claves:\n"
+        "1) analisis_detallado (string): visión general ejecutiva.\n"
+        "2) oportunidades_estrategicas (string[]): oportunidades transversales.\n"
+        "3) riesgos_identificados (string[]): riesgos clave.\n"
+        "4) plan_accion_sugerido (string[]): acciones generales ordenadas.\n"
+        "5) indicadores_clave_rendimiento (string[]): KPIs generales.\n"
+        "6) estructura_consultiva (object):\n"
+        "   - resumen_ejecutivo (string)\n"
+        "   - tabla_dominios (array<{dominio,nombre,score,severidad,prioridad}>)\n"
+        "   - dominios (obj con claves por dominio activo), cada dominio con:\n"
+        "       diagnostico (string), causas_raiz (string[]),\n"
+        "       recomendaciones_30_60_90: { '30': string[], '60': string[], '90': string[] },\n"
+        "       kpis: array<{nombre:string, meta:string}>,\n"
+        "       riesgos: array<{riesgo:string, mitigacion:string}>,\n"
+        "       quick_wins: string[]\n\n"
+        "Reglas de estilo: tono consultivo, evita obviedades, usa verbos de acción, concreta metas (e.g., 'Ciclo de caja ≤ 45 días'),\n"
+        "usa 2–4 bullets por lista. NO agregues texto fuera del JSON."
+    )
+
+    user_prompt = {
+        "contexto": {
+            "dominios_activados": resumen_tabla,
+            "campos_relevantes": subset
+        },
+        "instrucciones": instrucciones
+    }
+
+    return json.dumps(user_prompt, ensure_ascii=False)
+
+
+# ---------------------------
+# API principal
+# ---------------------------
 
 async def analizar_diagnostico_profundo(diagnostico_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Analiza los datos de un diagnóstico empresarial profundo utilizando un LLM.
-    Se espera que 'diagnostico_data' contenga información más detallada que el diagnóstico general.
+    Analiza diagnóstico profundo combinando reglas + LLM.
+    - Siempre calcula scores/severidad por dominio.
+    - Si hay OPENAI_API_KEY: intenta LLM JSON; sanea y combina.
+    - Si no hay clave o falla: genera salida consultiva por reglas (demo).
+    Devuelve un objeto que SIEMPRE incluye las 5 claves clásicas y,
+    además, 'estructura_consultiva' con el informe por dominios.
     """
-    prompt = (
-        "Eres un consultor de negocios altamente especializado en análisis estratégico y operativo. "
-        "Recibes un diagnóstico empresarial con datos detallados. "
-        "Realiza un análisis profundo identificando:\n"
-        "1. Un análisis detallado de la situación actual.\n"
-        "2. Oportunidades estratégicas a largo plazo.\n"
-        "3. Riesgos potenciales y su impacto.\n"
-        "4. Un plan de acción sugerido con pasos concretos.\n"
-        "5. Indicadores clave de rendimiento (KPIs) recomendados para monitorear el progreso.\n\n"
-        "Aquí están los datos del diagnóstico profundo:\n"
-        f"{json.dumps(diagnostico_data, ensure_ascii=False, indent=2)}\n\n"
-        "Por favor, devuelve la respuesta en formato JSON siguiendo el esquema proporcionado."
-    )
+    # 1) Scoring por dominios (siempre)
+    domains = _compute_domains(diagnostico_data)
 
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": prompt}]
-            }
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": RESPONSE_SCHEMA
-        }
-    }
+    # 2) Sin clave: demo consultivo por reglas
+    if not OPENAI_API_KEY:
+        demo_struct = _build_rule_based_structure(domains)
+        return _sanitize_output({**_DEMO_TOP, "estructura_consultiva": demo_struct}, domains)
 
+    # 3) Con clave: LLM JSON mode
     try:
-        response_json = await call_gemini_api_with_backoff(payload, MODEL_NAME, API_KEY)
-        if response_json and response_json.get("candidates"):
-            candidate = response_json["candidates"][0]
-            if candidate.get("content") and candidate["content"].get("parts"):
-                text_part = candidate["content"]["parts"][0].get("text")
-                if text_part:
-                    return json.loads(text_part)
-        raise Exception("Estructura de respuesta inesperada del LLM.")
-    except Exception as e:
-        print(f"Error al analizar el diagnóstico profundo con LLM: {e}")
-        return {
-            "analisis_detallado": "No se pudo generar el análisis detallado debido a un error.",
-            "oportunidades_estrategicas": ["Error en el análisis de IA."],
-            "riesgos_identificados": ["Error en el análisis de IA."],
-            "plan_accion_sugerido": ["Verifica la configuración de la API o intenta de nuevo más tarde."],
-            "indicadores_clave_rendimiento": ["Error en el análisis de IA."]
-        }
+        prompt = _make_llm_prompt(diagnostico_data, domains)
 
+        def _call():
+            comp = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": "Responde únicamente con JSON válido siguiendo las instrucciones."},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.2,
+            )
+            return comp
+
+        completion = await asyncio.to_thread(_call)
+        content = completion.choices[0].message.content or "{}"
+        parsed = json.loads(content)
+
+        # Saneamos y garantizamos claves mínimas + estructura consultiva
+        return _sanitize_output(parsed, domains)
+
+    except Exception as e:
+        logger.exception("OpenAI error en analizar_diagnostico_profundo")
+        if DEMO_ON_ERROR:
+            demo_struct = _build_rule_based_structure(domains)
+            # Demo de emergencia para no romper el flujo del usuario
+            demo = {
+                **_DEMO_TOP,
+                "analisis_detallado": f"[DEMO POR ERROR: {type(e).__name__}] " + _DEMO_TOP["analisis_detallado"],
+                "estructura_consultiva": demo_struct,
+            }
+            return _sanitize_output(demo, domains)
+
+        raise HTTPException(status_code=502, detail=f"Fallo con OpenAI ({MODEL_NAME}): {e}")
