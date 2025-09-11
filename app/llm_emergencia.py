@@ -1,4 +1,5 @@
 # app/llm_emergencia.py
+
 import os
 import json
 import asyncio
