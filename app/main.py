@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import io
 
 # IMPORTA TUS FUNCIONES DEL LLM Y PDF
@@ -17,18 +17,18 @@ from app.llm_emergencia import analizar_diagnostico_emergencia
 
 # IMPORTA LAS FUNCIONES DE LOS CHATBOTS
 from app.llm_grok import chat_grok
-from app.llm_grok_ayuda import chat_grok_ayuda # <-- nuevo import
+from app.llm_grok_ayuda import chat_grok_ayuda  # <-- nuevo import
 
 app = FastAPI(
     title="MentorApp LLM Backend",
     description="API para análisis y reporte de diagnósticos empresariales",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Habilita CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Ajusta a tus dominios en producción
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -36,6 +36,13 @@ app.add_middleware(
 @app.get("/")
 def ping():
     return {"status": "ok", "msg": "MentorApp backend online."}
+
+@app.head("/")
+def ping_head():
+    # Útil para plataformas que hacen HEAD health-checks
+    return JSONResponse(content=None, status_code=200)
+
+# ---------------- Diagnóstico "simple" (histórico / pdf) ----------------
 
 @app.post("/api/diagnostico/analyze")
 async def analyze_one(data: dict):
@@ -63,14 +70,20 @@ async def report_pdf(payload: dict):
     pdf_bytes = await generar_reporte_pdf(diagnostico)
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf")
 
-# NUEVOS ENDPOINTS PARA LOS DIFERENTES TIPOS DE DIAGNÓSTICO
+# ---------------- Nuevos diagnósticos ----------------
+
 @app.post("/api/diagnostico/general/analyze")
 async def analyze_general_diagnosis(data: dict):
     """
     Analiza los datos de un diagnóstico general utilizando el LLM específico.
-    Recibe: Un diccionario con los datos del diagnóstico general.
-    Devuelve: Un diccionario con el análisis del LLM (resumen, oportunidades, recomendaciones, etc.).
     """
+    if not data:
+        raise HTTPException(400, "Datos del diagnóstico general vacíos")
+    return await analizar_diagnostico_general(data)
+
+# Ruta legacy para compatibilidad con llamadas antiguas (con guion)
+@app.post("/api/diagnostico/general-analyze")
+async def analyze_general_diagnosis_legacy(data: dict):
     if not data:
         raise HTTPException(400, "Datos del diagnóstico general vacíos")
     return await analizar_diagnostico_general(data)
@@ -79,8 +92,6 @@ async def analyze_general_diagnosis(data: dict):
 async def analyze_profundo_diagnosis(data: dict):
     """
     Analiza los datos de un diagnóstico profundo utilizando el LLM específico.
-    Recibe: Un diccionario con los datos del diagnóstico profundo.
-    Devuelve: Un diccionario con el análisis del LLM.
     """
     if not data:
         raise HTTPException(400, "Datos del diagnóstico profundo vacíos")
@@ -90,14 +101,13 @@ async def analyze_profundo_diagnosis(data: dict):
 async def analyze_emergencia_diagnosis(data: dict):
     """
     Analiza los datos de un diagnóstico de emergencia utilizando el LLM específico.
-    Recibe: Un diccionario con los datos del diagnóstico de emergencia.
-    Devuelve: Un diccionario con el análisis del LLM.
     """
     if not data:
         raise HTTPException(400, "Datos del diagnóstico de emergencia vacíos")
     return await analizar_diagnostico_emergencia(data)
 
-# ENDPOINT PARA EL CHATBOT (GROK)
+# ---------------- Chatbots ----------------
+
 @app.post("/api/chatbot")
 async def chatbot(request: Request):
     data = await request.json()
@@ -107,10 +117,9 @@ async def chatbot(request: Request):
     try:
         reply = await chat_grok(message)
         return {"reply": reply}
-    except Exception as e:
+    except Exception:
         return {"reply": "Ocurrió un error con el asistente. Intenta más tarde."}
 
-# ENDPOINT PARA EL NUEVO CHATBOT DE AYUDA
 @app.post("/api/chatbot-ayuda")
 async def chatbot_ayuda(request: Request):
     data = await request.json()
@@ -120,5 +129,5 @@ async def chatbot_ayuda(request: Request):
     try:
         reply = await chat_grok_ayuda(message)
         return {"reply": reply}
-    except Exception as e:
+    except Exception:
         return {"reply": "Ocurrió un error con el asistente de ayuda. Intenta más tarde."}
