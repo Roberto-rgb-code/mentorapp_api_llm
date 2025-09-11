@@ -10,10 +10,10 @@ from openai import OpenAI
 logger = logging.getLogger("diag_profundo")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-# Usa un modelo disponible en tu cuenta (p.ej. "gpt-4o-mini", "gpt-4.1-mini", etc.)
-MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini")
+# Mantén consistencia con los otros módulos
+MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-mini")
 
-# Si DIAG_DEMO_ON_ERROR=1, ante error con OpenAI respondemos demo en lugar de 502 (útil en dev)
+# Si DIAG_DEMO_ON_ERROR=1, ante error con OpenAI respondemos demo en lugar de 502
 DEMO_ON_ERROR = os.getenv("DIAG_DEMO_ON_ERROR", "1") == "1"
 
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -21,8 +21,6 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # ---------------------------
 # Configuración de dominios
 # ---------------------------
-
-# Palabras/expresiones que bajan el score si aparecen en textos abiertos del dominio.
 KW_FIN = ["flujo de caja", "liquidez", "morosidad", "deuda", "pérdida", "perdida", "quiebra", "sin presupuesto"]
 KW_RH  = ["conflicto", "rotación", "burnout", "clima", "falta de capacitación", "ausentismo"]
 KW_OP  = ["cuello de botella", "reproceso", "mermas", "retraso", "ineficiencia", "sin procesos", "sin documentación"]
@@ -132,15 +130,10 @@ DOMAIN_CONFIG = {
     },
 }
 
-
 # ---------------------------
 # Utilidades de scoring
 # ---------------------------
-
 def _likert_to_num(v: Any) -> Optional[float]:
-    """
-    Convierte valores tipo "1".."5" o int 1..5 a float. Devuelve None si no hay valor.
-    """
     if v is None:
         return None
     if isinstance(v, (int, float)):
@@ -155,32 +148,20 @@ def _likert_to_num(v: Any) -> Optional[float]:
                 return f
     return None
 
-
 def _text_contains_any(text: str, kws: List[str]) -> bool:
     t = (text or "").lower()
     return any(k.lower() in t for k in kws)
 
-
 def _severity_from_score(score: float) -> str:
-    if score <= 2.0:
-        return "Crítico"
-    if score <= 2.5:
-        return "Alto"
-    if score <= 3.5:
-        return "Medio"
+    if score <= 2.0: return "Crítico"
+    if score <= 2.5: return "Alto"
+    if score <= 3.5: return "Medio"
     return "Bajo"
-
 
 def _priority_from_severity(sev: str) -> str:
     return {"Crítico": "P1", "Alto": "P1", "Medio": "P2"}.get(sev, "P3")
 
-
 def _compute_domain_score(data: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[float, List[str], int]:
-    """
-    Calcula score promedio (1-5) a partir de likerts presentes.
-    Penaliza -0.5 si encuentra palabras clave negativas en los textos del dominio.
-    Devuelve (score_clamped, evidencias_texto, n_likerts_utilizados).
-    """
     lik_vals: List[float] = []
     for f in cfg["likert_fields"]:
         val = _likert_to_num(data.get(f))
@@ -189,7 +170,6 @@ def _compute_domain_score(data: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[fl
 
     evidencias: List[str] = []
     neg_hit = False
-
     for tf in cfg["text_fields"]:
         tv = str(data.get(tf) or "")
         if tv:
@@ -197,23 +177,12 @@ def _compute_domain_score(data: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[fl
             if not neg_hit and _text_contains_any(tv, cfg["keywords"]):
                 neg_hit = True
 
-    if not lik_vals:
-        # Sin likerts, base neutra 3.0 y aplica penalización si hay señales negativas
-        base = 3.0
-    else:
-        base = sum(lik_vals) / len(lik_vals)
-
-    if neg_hit:
-        base -= 0.5
-
+    base = (sum(lik_vals) / len(lik_vals)) if lik_vals else 3.0
+    if neg_hit: base -= 0.5
     base = max(1.0, min(5.0, base))
     return base, evidencias, len(lik_vals)
 
-
 def _compute_domains(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Construye dict de dominios con score, severidad, prioridad y evidencias.
-    """
     out = {}
     for dom_key, cfg in DOMAIN_CONFIG.items():
         score, evid, nlik = _compute_domain_score(data, cfg)
@@ -229,11 +198,9 @@ def _compute_domains(data: Dict[str, Any]) -> Dict[str, Any]:
         }
     return out
 
-
 # ---------------------------
-# DEMO / Fallback plantillas
+# DEMO / Fallback
 # ---------------------------
-
 _DEMO_TOP = {
     "analisis_detallado": "Diagnóstico generado en modo DEMO (sin clave OpenAI o por error).",
     "oportunidades_estrategicas": [
@@ -253,9 +220,7 @@ _DEMO_TOP = {
     "indicadores_clave_rendimiento": ["Margen bruto", "Ciclo de caja", "Rotación de personal", "NPS", "OTIF"],
 }
 
-
 def _quick_template_by_domain(sev: str, label: str) -> Dict[str, Any]:
-    """Crea un bloque consultivo básico por dominio para casos demo o fallback."""
     pref = "Prioridad alta" if sev in ("Crítico", "Alto") else "Prioridad media"
     return {
         "diagnostico": f"{label}: {pref}. Se observan brechas que requieren intervención inmediata para estabilizar resultados.",
@@ -279,9 +244,7 @@ def _quick_template_by_domain(sev: str, label: str) -> Dict[str, Any]:
         "quick_wins": ["Checklist operativo semanal", "Hitos quincenales con tablero visible"],
     }
 
-
 def _build_rule_based_structure(domains: Dict[str, Any]) -> Dict[str, Any]:
-    """Estructura consultiva basada en reglas para todos los dominios (fallback/demo)."""
     tabla = []
     detail = {}
     for k, d in domains.items():
@@ -293,8 +256,6 @@ def _build_rule_based_structure(domains: Dict[str, Any]) -> Dict[str, Any]:
             "prioridad": d["prioridad"],
         })
         detail[k] = _quick_template_by_domain(d["severidad"], d["nombre"])
-
-        # Ajustes de KPIs según dominio (ligera personalización)
         if k == "finanzas":
             detail[k]["kpis"] = [
                 {"nombre": "Ciclo de caja", "meta": "≤ 45 días"},
@@ -310,7 +271,6 @@ def _build_rule_based_structure(domains: Dict[str, Any]) -> Dict[str, Any]:
                 {"nombre": "OTIF", "meta": "≥ 95%"},
                 {"nombre": "Productividad", "meta": "+15% en 90 días"},
             ]
-
     tabla.sort(key=lambda x: {"P1": 0, "P2": 1, "P3": 2}[x["prioridad"]])
     return {
         "resumen_ejecutivo": "Se priorizan los dominios con severidad Crítico/Alto. Se propone un plan 30-60-90 con KPIs claros.",
@@ -318,13 +278,10 @@ def _build_rule_based_structure(domains: Dict[str, Any]) -> Dict[str, Any]:
         "dominios": detail,
     }
 
-
 # ---------------------------
 # Saneado de salida
 # ---------------------------
-
 def _sanitize_output(obj: Dict[str, Any], fallback_domains: Dict[str, Any]) -> Dict[str, Any]:
-    """Garantiza claves mínimas y conserva estructura consultiva si existe; si falta, la genera por reglas."""
     def S(x): return x if isinstance(x, str) else ""
     def A(x): return x if isinstance(x, list) and all(isinstance(i, str) for i in x) else []
 
@@ -336,7 +293,6 @@ def _sanitize_output(obj: Dict[str, Any], fallback_domains: Dict[str, Any]) -> D
         "indicadores_clave_rendimiento": A(obj.get("indicadores_clave_rendimiento")),
     }
 
-    # Relleno mínimo para no romper UI
     if not out["analisis_detallado"]:
         out["analisis_detallado"] = _DEMO_TOP["analisis_detallado"]
     if not out["oportunidades_estrategicas"]:
@@ -348,7 +304,6 @@ def _sanitize_output(obj: Dict[str, Any], fallback_domains: Dict[str, Any]) -> D
     if not out["indicadores_clave_rendimiento"]:
         out["indicadores_clave_rendimiento"] = _DEMO_TOP["indicadores_clave_rendimiento"]
 
-    # Estructura consultiva ampliada
     ec = obj.get("estructura_consultiva")
     if isinstance(ec, dict):
         out["estructura_consultiva"] = ec
@@ -357,19 +312,12 @@ def _sanitize_output(obj: Dict[str, Any], fallback_domains: Dict[str, Any]) -> D
 
     return out
 
-
 # ---------------------------
 # Prompt y llamada al LLM
 # ---------------------------
-
 def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any]) -> str:
-    """
-    Prepara prompt con foco en dominios de prioridad P1/P2. Se pide voz de consultor senior y salida JSON.
-    """
-    # Selecciona dominios a analizar con LLM (al menos P1 y P2)
     activos = [v for v in domains.values() if v["prioridad"] in ("P1", "P2")]
     if not activos:
-        # Si todo es P3, toma los 2 peores scores
         activos = sorted(domains.values(), key=lambda x: x["score"])[:2]
 
     resumen_tabla = [
@@ -384,7 +332,6 @@ def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any]) 
         for d in activos
     ]
 
-    # Reducimos datos de entrada solo a campos relevantes para los dominios activos
     campos_relevantes = set()
     for d in activos:
         cfg = DOMAIN_CONFIG[d["dominio"]]
@@ -395,22 +342,16 @@ def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any]) 
     instrucciones = (
         "Eres un CONSULTOR SENIOR. Redacta con precisión, foco y priorización.\n"
         "Genera un JSON con las claves:\n"
-        "1) analisis_detallado (string): visión general ejecutiva.\n"
-        "2) oportunidades_estrategicas (string[]): oportunidades transversales.\n"
-        "3) riesgos_identificados (string[]): riesgos clave.\n"
-        "4) plan_accion_sugerido (string[]): acciones generales ordenadas.\n"
-        "5) indicadores_clave_rendimiento (string[]): KPIs generales.\n"
-        "6) estructura_consultiva (object):\n"
+        "1) analisis_detallado (string)\n"
+        "2) oportunidades_estrategicas (string[])\n"
+        "3) riesgos_identificados (string[])\n"
+        "4) plan_accion_sugerido (string[])\n"
+        "5) indicadores_clave_rendimiento (string[])\n"
+        "6) estructura_consultiva (object) con:\n"
         "   - resumen_ejecutivo (string)\n"
         "   - tabla_dominios (array<{dominio,nombre,score,severidad,prioridad}>)\n"
-        "   - dominios (obj con claves por dominio activo), cada dominio con:\n"
-        "       diagnostico (string), causas_raiz (string[]),\n"
-        "       recomendaciones_30_60_90: { '30': string[], '60': string[], '90': string[] },\n"
-        "       kpis: array<{nombre:string, meta:string}>,\n"
-        "       riesgos: array<{riesgo:string, mitigacion:string}>,\n"
-        "       quick_wins: string[]\n\n"
-        "Reglas de estilo: tono consultivo, evita obviedades, usa verbos de acción, concreta metas (e.g., 'Ciclo de caja ≤ 45 días'),\n"
-        "usa 2–4 bullets por lista. NO agregues texto fuera del JSON."
+        "   - dominios (obj por dominio activo) con: diagnostico, causas_raiz[], recomendaciones_30_60_90{30,60,90}, kpis[], riesgos[], quick_wins[]\n"
+        "NO agregues texto fuera del JSON. Tono consultivo, metas concretas, 2–4 bullets por lista."
     )
 
     user_prompt = {
@@ -423,29 +364,16 @@ def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any]) 
 
     return json.dumps(user_prompt, ensure_ascii=False)
 
-
 # ---------------------------
 # API principal
 # ---------------------------
-
 async def analizar_diagnostico_profundo(diagnostico_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Analiza diagnóstico profundo combinando reglas + LLM.
-    - Siempre calcula scores/severidad por dominio.
-    - Si hay OPENAI_API_KEY: intenta LLM JSON; sanea y combina.
-    - Si no hay clave o falla: genera salida consultiva por reglas (demo).
-    Devuelve un objeto que SIEMPRE incluye las 5 claves clásicas y,
-    además, 'estructura_consultiva' con el informe por dominios.
-    """
-    # 1) Scoring por dominios (siempre)
     domains = _compute_domains(diagnostico_data)
 
-    # 2) Sin clave: demo consultivo por reglas
     if not OPENAI_API_KEY:
         demo_struct = _build_rule_based_structure(domains)
         return _sanitize_output({**_DEMO_TOP, "estructura_consultiva": demo_struct}, domains)
 
-    # 3) Con clave: LLM JSON mode
     try:
         prompt = _make_llm_prompt(diagnostico_data, domains)
 
@@ -464,20 +392,16 @@ async def analizar_diagnostico_profundo(diagnostico_data: Dict[str, Any]) -> Dic
         completion = await asyncio.to_thread(_call)
         content = completion.choices[0].message.content or "{}"
         parsed = json.loads(content)
-
-        # Saneamos y garantizamos claves mínimas + estructura consultiva
         return _sanitize_output(parsed, domains)
 
     except Exception as e:
         logger.exception("OpenAI error en analizar_diagnostico_profundo")
         if DEMO_ON_ERROR:
             demo_struct = _build_rule_based_structure(domains)
-            # Demo de emergencia para no romper el flujo del usuario
             demo = {
                 **_DEMO_TOP,
                 "analisis_detallado": f"[DEMO POR ERROR: {type(e).__name__}] " + _DEMO_TOP["analisis_detallado"],
                 "estructura_consultiva": demo_struct,
             }
             return _sanitize_output(demo, domains)
-
         raise HTTPException(status_code=502, detail=f"Fallo con OpenAI ({MODEL_NAME}): {e}")
