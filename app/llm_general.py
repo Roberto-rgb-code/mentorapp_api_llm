@@ -1,204 +1,178 @@
-# app/llm_gpt.py
+# app/llm_general.py
 import os
 import json
-import time
-import httpx
-import asyncio # Necesario para asyncio.sleep
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
+from fastapi import HTTPException
 
-# Define la URL base del API de Gemini
-GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-# Obtén la API Key de una variable de entorno o déjala vacía si Canvas la inyecta
-API_KEY = os.getenv("GEMINI_API_KEY", "") # Deja vacío si Canvas la inyecta automáticamente
-MODEL_NAME = "gemini-2.5-flash-preview-05-20" # Usamos gemini-2.5-flash-preview-05-20 como LLM por defecto
+# OpenAI SDK (pip install openai>=1.40.0)
+from openai import OpenAI
 
-# Esquema de respuesta esperado del LLM
-# Debe coincidir con la interfaz LLMAnalysisResult en el frontend
-RESPONSE_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "resumen_ejecutivo": {"type": "STRING", "description": "Resumen ejecutivo del diagnóstico."},
-        "areas_oportunidad": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "Lista de áreas clave de oportunidad identificadas."
-        },
-        "recomendaciones_clave": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "Lista de recomendaciones accionables para la empresa."
-        },
-        "puntuacion_madurez_promedio": {
-            "type": "NUMBER",
-            "description": "Puntuación promedio de madurez basada en las respuestas Likert."
-        },
-        "nivel_madurez_general": {
-            "type": "STRING",
-            "enum": ["muy_bajo", "bajo", "medio", "alto", "muy_alto"],
-            "description": "Nivel general de madurez de la empresa."
-        }
-    },
-    "required": [
-        "resumen_ejecutivo",
-        "areas_oportunidad",
-        "recomendaciones_clave",
-        "puntuacion_madurez_promedio",
-        "nivel_madurez_general"
-    ]
-}
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-mini")
 
-async def call_gemini_api_with_backoff(
-    payload: Dict[str, Any],
-    model_name: str,
-    api_key: str,
-    max_retries: int = 5,
-    initial_delay: float = 1.0
-) -> Dict[str, Any]:
-    """
-    Realiza una llamada al API de Gemini con reintentos y retroceso exponencial.
-    """
-    url = f"{GEMINI_API_BASE_URL}/{model_name}:generateContent?key={api_key}"
-    headers = {'Content-Type': 'application/json'}
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client: # Aumentar el timeout
-                response = await client.post(url, headers=headers, json=payload)
-                response.raise_for_status() # Lanza una excepción para códigos de estado HTTP 4xx/5xx
-                return response.json()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429 and attempt < max_retries - 1:
-                # Too Many Requests - Implementar retroceso exponencial
-                delay = initial_delay * (2 ** attempt)
-                print(f"Demasiadas solicitudes (429). Reintentando en {delay:.2f} segundos...")
-                await asyncio.sleep(delay)
-            else:
-                print(f"Error HTTP: {e.response.status_code} - {e.response.text}")
-                raise
-        except httpx.RequestError as e:
-            print(f"Error de solicitud: {e}")
-            if attempt < max_retries - 1:
-                delay = initial_delay * (2 ** attempt)
-                print(f"Error de red. Reintentando en {delay:.2f} segundos...")
-                await asyncio.sleep(delay)
-            else:
-                raise
-        except Exception as e:
-            print(f"Error inesperado: {e}")
-            raise
-    raise Exception("Fallo en la llamada al API de Gemini después de varios reintentos.")
+# ---- Utilidades ----
+def _respuesta_vacia(mensaje_error: str = "No se pudo generar el análisis.") -> Dict[str, Any]:
+    return {
+        "resumen_ejecutivo": f"{mensaje_error}",
+        "areas_oportunidad": ["Error en el análisis con IA."],
+        "recomendaciones_clave": ["Verifica la configuración de la API o intenta de nuevo más tarde."],
+        "puntuacion_madurez_promedio": 0.0,
+        "nivel_madurez_general": "muy_bajo",
+    }
 
+def _nivel_madurez_desde_promedio(avg: float) -> str:
+    if avg >= 4.6:
+        return "muy_alto"
+    if avg >= 4.0:
+        return "alto"
+    if avg >= 3.0:
+        return "medio"
+    if avg >= 2.0:
+        return "bajo"
+    return "muy_bajo"
 
+def _extraer_likert(d: Dict[str, Any]) -> Tuple[float, str]:
+    """Calcula el promedio de todas las respuestas tipo Likert (claves que inician con dg_, fa_, op_, mv_, rh_, lc_)."""
+    scores: List[int] = []
+    for k, v in d.items():
+        if k.startswith(("dg_", "fa_", "op_", "mv_", "rh_", "lc_")) and str(v) in {"1", "2", "3", "4", "5"}:
+            scores.append(int(v))
+    if not scores:
+        return 0.0, "muy_bajo"
+    avg = round(sum(scores) / len(scores), 2)
+    return avg, _nivel_madurez_desde_promedio(avg)
+
+def _formatear_datos_para_prompt(d: Dict[str, Any]) -> str:
+    """Convierte el dict de respuestas en líneas legibles para el prompt, excluyendo campos internos vacíos."""
+    partes: List[str] = []
+    for key, value in d.items():
+        if key in {"userId", "createdAt"} or value in ("", None):
+            continue
+        partes.append(f"- {key}: {value}")
+    return "\n".join(partes)
+
+# ---- Analizador principal ----
 async def analizar_diagnostico_general(diagnostico_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Analiza los datos de un diagnóstico empresarial general utilizando un LLM.
-    Genera un resumen, áreas de oportunidad, recomendaciones y un nivel de madurez.
+    Analiza los datos de un diagnóstico empresarial general usando OpenAI (gpt-4.1-mini),
+    devolviendo el JSON EXACTO que consume el frontend:
+    {
+      resumen_ejecutivo: string,
+      areas_oportunidad: string[],
+      recomendaciones_clave: string[],
+      puntuacion_madurez_promedio: number,
+      nivel_madurez_general: "muy_bajo"|"bajo"|"medio"|"alto"|"muy_alto"
+    }
     """
-    # Construir el prompt para el LLM
-    prompt_parts = [
-        "Eres un consultor de negocios experto en diagnóstico empresarial. "
-        "Analiza el siguiente diagnóstico general de una empresa. "
-        "Proporciona un resumen ejecutivo, identifica las áreas de oportunidad clave, "
-        "ofrece recomendaciones accionables y calcula una puntuación promedio de madurez "
-        "basada en las respuestas de Likert (1-5), y un nivel de madurez general. "
-        "La interpretación de la escala Likert es:\n"
-        "1: Difuso, poco claro, no desarrollado; no se cumplen los objetivos; no se percibe valor.\n"
-        "2: Se realiza de manera ocasional e informal; a veces se cumplen los objetivos; se percibe poco valor.\n"
-        "3: Se realiza regularmente, pero sin procesos definidos y de forma perceptiva; se cumplen los objetivos; se percibe valor principalmente a nivel regional.\n"
-        "4: Se realiza correctamente, con seguimiento y mediciones básicas; se cumplen los objetivos con procesos estandarizados; se reconoce su alto valor a nivel nacional.\n"
-        "5: Se realiza de manera excelente, automatizada y con indicadores de desempeño; se cumplen los objetivos con altos estándares; es reconocido a nivel internacional.\n\n"
-        "Los niveles de madurez general deben ser: 'muy_bajo' (1.0-1.9), 'bajo' (2.0-2.9), 'medio' (3.0-3.9), 'alto' (4.0-4.5), 'muy_alto' (4.6-5.0).\n\n"
-        "Aquí están los datos del diagnóstico:\n"
-    ]
 
-    # Añadir los datos del diagnóstico al prompt
-    for key, value in diagnostico_data.items():
-        if key not in ["userId", "createdAt"] and value: # Excluir campos internos y vacíos
-            # Formatear las claves para que sean más legibles en el prompt
-            display_key = key.replace('_', ' ').replace('dg ', 'Dirección General: ').replace('fa ', 'Finanzas y Administración: ') \
-                             .replace('op ', 'Operaciones: ').replace('mv ', 'Marketing y Ventas: ') \
-                             .replace('rh ', 'Recursos Humanos: ').replace('lc ', 'Logística y Cadena de Suministro: ') \
-                             .replace('nombreSolicitante', 'Nombre del Solicitante') \
-                             .replace('puestoSolicitante', 'Puesto del Solicitante') \
-                             .replace('nombreEmpresa', 'Nombre de la Empresa') \
-                             .replace('rfcEmpresa', 'RFC de la Empresa') \
-                             .replace('giroIndustria', 'Giro/Industria') \
-                             .replace('numeroEmpleados', 'Número de Empleados') \
-                             .replace('antiguedadEmpresa', 'Antigüedad de la Empresa') \
-                             .replace('ubicacion', 'Ubicación') \
-                             .replace('telefonoContacto', 'Teléfono de Contacto') \
-                             .replace('correoElectronico', 'Correo Electrónico') \
-                             .replace('sitioWebRedes', 'Sitio Web/Redes Sociales') \
-                             .replace('areaMayorProblema', 'Área con Mayor Problema') \
-                             .replace('problematicaEspecifica', 'Problemática Específica') \
-                             .replace('principalPrioridad', 'Principal Prioridad') \
-                             .strip()
-            prompt_parts.append(f"- {display_key}: {value}\n")
-
-    full_prompt = "".join(prompt_parts)
-
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": full_prompt}]
-            }
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": RESPONSE_SCHEMA
+    # Fallback DEMO si no hay API key (útil en local)
+    if not OPENAI_API_KEY:
+        avg, nivel = _extraer_likert(diagnostico_data)
+        return {
+            "resumen_ejecutivo": "Demo local sin OPENAI_API_KEY. Se detectan oportunidades en planeación, finanzas y marketing.",
+            "areas_oportunidad": [
+                "Definición y seguimiento de objetivos (OKR)",
+                "Control y proyección de flujo de caja",
+                "Estandarización de procesos operativos",
+                "Definición de ICP y canal comercial",
+            ],
+            "recomendaciones_clave": [
+                "Implantar tablero semanal con KPIs",
+                "Auditar gastos y renegociar costos",
+                "Documentar procesos críticos (SOPs)",
+                "Campañas con propuesta de valor segmentada",
+            ],
+            "puntuacion_madurez_promedio": avg,
+            "nivel_madurez_general": nivel,
         }
+
+    # Construcción del prompt
+    datos_fmt = _formatear_datos_para_prompt(diagnostico_data)
+    avg, nivel = _extraer_likert(diagnostico_data)
+
+    system_msg = {
+        "role": "system",
+        "content": (
+            "Eres un consultor de negocios experto. Responde EXCLUSIVAMENTE con JSON válido. "
+            "El JSON debe cumplir el siguiente contrato:\n"
+            "{\n"
+            '  "resumen_ejecutivo": string,\n'
+            '  "areas_oportunidad": string[],\n'
+            '  "recomendaciones_clave": string[],\n'
+            '  "puntuacion_madurez_promedio": number,\n'
+            '  "nivel_madurez_general": "muy_bajo"|"bajo"|"medio"|"alto"|"muy_alto"\n'
+            "}\n"
+            "Nada de texto fuera de JSON."
+        ),
+    }
+
+    user_msg = {
+        "role": "user",
+        "content": (
+            "Analiza el siguiente diagnóstico general. Devuelve SOLO el JSON con:\n"
+            "- resumen_ejecutivo: breve, claro y accionable.\n"
+            "- areas_oportunidad: 4–8 puntos concretos.\n"
+            "- recomendaciones_clave: 4–8 acciones prácticas (0-90 días).\n"
+            "- puntuacion_madurez_promedio: número (puedes usar el cálculo sugerido si aplica).\n"
+            "- nivel_madurez_general: muy_bajo | bajo | medio | alto | muy_alto.\n\n"
+            "Interpretación Likert:\n"
+            "1: Difuso; 2: Ocasional; 3: Regular sin procesos; 4: Correcto y estandarizado; 5: Excelente y automatizado.\n\n"
+            f"Sugerencia de cálculo (opcional) basada en las respuestas: promedio={avg}, nivel={nivel}.\n\n"
+            "Datos:\n"
+            f"{datos_fmt}\n\n"
+            "Recuerda: responde SOLO con JSON válido."
+        ),
     }
 
     try:
-        response_json = await call_gemini_api_with_backoff(payload, MODEL_NAME, API_KEY)
-        
-        # Extraer y parsear la respuesta JSON del LLM
-        if response_json and response_json.get("candidates"):
-            candidate = response_json["candidates"][0]
-            if candidate.get("content") and candidate["content"].get("parts"):
-                text_part = candidate["content"]["parts"][0].get("text")
-                if text_part:
-                    parsed_result = json.loads(text_part)
+        # Usamos chat.completions con JSON mode (json_object) para evitar problemas con Responses API
+        completion = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[system_msg, user_msg],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
 
-                    # Calcular la puntuación promedio de madurez y el nivel de madurez
-                    likert_scores = []
-                    for key, value in diagnostico_data.items():
-                        # Asegúrate de que las claves aquí coincidan con las claves de tus preguntas Likert en el frontend
-                        if key.startswith(("dg_", "fa_", "op_", "mv_", "rh_", "lc_")) and value in ["1", "2", "3", "4", "5"]:
-                            try:
-                                likert_scores.append(int(value))
-                            except ValueError:
-                                pass # Ignorar valores no numéricos
+        content = completion.choices[0].message.content or "{}"
+        parsed = json.loads(content)
 
-                    if likert_scores:
-                        avg_score = sum(likert_scores) / len(likert_scores)
-                        parsed_result["puntuacion_madurez_promedio"] = round(avg_score, 2)
+        # Validación mínima y saneo de tipos/valores
+        if not isinstance(parsed.get("resumen_ejecutivo", ""), str):
+            parsed["resumen_ejecutivo"] = "No se pudo generar el resumen."
 
-                        if avg_score >= 4.6:
-                            parsed_result["nivel_madurez_general"] = "muy_alto"
-                        elif avg_score >= 4.0:
-                            parsed_result["nivel_madurez_general"] = "alto"
-                        elif avg_score >= 3.0:
-                            parsed_result["nivel_madurez_general"] = "medio"
-                        elif avg_score >= 2.0:
-                            parsed_result["nivel_madurez_general"] = "bajo"
-                        else:
-                            parsed_result["nivel_madurez_general"] = "muy_bajo"
-                    else:
-                        parsed_result["puntuacion_madurez_promedio"] = 0.0
-                        parsed_result["nivel_madurez_general"] = "muy_bajo" # O un valor por defecto si no hay scores
+        def _as_list_str(x):
+            if isinstance(x, list):
+                return [str(i) for i in x][:12]
+            return []
 
-                    return parsed_result
-        raise Exception("Estructura de respuesta inesperada del LLM.")
+        parsed["areas_oportunidad"] = _as_list_str(parsed.get("areas_oportunidad", []))
+        parsed["recomendaciones_clave"] = _as_list_str(parsed.get("recomendaciones_clave", []))
+
+        # Recalcular con datos reales del usuario (tiene prioridad)
+        avg_usr, nivel_usr = _extraer_likert(diagnostico_data)
+        parsed["puntuacion_madurez_promedio"] = float(parsed.get("puntuacion_madurez_promedio", avg_usr or 0.0))
+        parsed["nivel_madurez_general"] = str(parsed.get("nivel_madurez_general", nivel_usr or "muy_bajo"))
+
+        # Asegurar consistencia si el modelo devolvió algo fuera de rango
+        if parsed["nivel_madurez_general"] not in {"muy_bajo", "bajo", "medio", "alto", "muy_alto"}:
+            parsed["nivel_madurez_general"] = nivel_usr
+
+        # Si el promedio no tiene sentido, aplicamos nuestro cálculo
+        if parsed["puntuacion_madurez_promedio"] <= 0.0 and avg_usr > 0.0:
+            parsed["puntuacion_madurez_promedio"] = avg_usr
+            parsed["nivel_madurez_general"] = nivel_usr
+
+        return parsed
+
     except Exception as e:
-        print(f"Error al analizar el diagnóstico con LLM: {e}")
-        # Retornar un resultado de error o una estructura vacía
+        # No reventar al frontend: retornar payload útil con mensaje de error (+ cálculo propio si aplica)
+        avg2, nivel2 = _extraer_likert(diagnostico_data)
         return {
-            "resumen_ejecutivo": "No se pudo generar el resumen ejecutivo debido a un error.",
-            "areas_oportunidad": ["Error en el análisis de IA."],
-            "recomendaciones_clave": ["Verifica la configuración de la API o intenta de nuevo más tarde."],
-            "puntuacion_madurez_promedio": 0.0,
-            "nivel_madurez_general": "muy_bajo"
+            "resumen_ejecutivo": f"Error al analizar con OpenAI ({MODEL_NAME}): {str(e)}",
+            "areas_oportunidad": ["No fue posible generar áreas de oportunidad."],
+            "recomendaciones_clave": ["Intenta nuevamente en unos minutos o verifica tu API Key."],
+            "puntuacion_madurez_promedio": avg2,
+            "nivel_madurez_general": nivel2,
         }
-
