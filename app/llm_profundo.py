@@ -178,7 +178,8 @@ def _compute_domain_score(data: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[fl
                 neg_hit = True
 
     base = (sum(lik_vals) / len(lik_vals)) if lik_vals else 3.0
-    if neg_hit: base -= 0.5
+    if neg_hit:
+        base -= 0.5
     base = max(1.0, min(5.0, base))
     return base, evidencias, len(lik_vals)
 
@@ -368,8 +369,15 @@ def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any]) 
 # API principal
 # ---------------------------
 async def analizar_diagnostico_profundo(diagnostico_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Entrada: diagnostico_data (dict) con las claves del formulario TSX.
+    Salida: objeto con analisis_detallado, oportunidades_estrategicas[],
+            riesgos_identificados[], plan_accion_sugerido[], indicadores_clave_rendimiento[],
+            y estructura_consultiva (resumen_ejecutivo, tabla_dominios, dominios{...}).
+    """
     domains = _compute_domains(diagnostico_data)
 
+    # Modo DEMO si no hay API key
     if not OPENAI_API_KEY:
         demo_struct = _build_rule_based_structure(domains)
         return _sanitize_output({**_DEMO_TOP, "estructura_consultiva": demo_struct}, domains)
