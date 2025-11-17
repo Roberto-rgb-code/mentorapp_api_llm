@@ -11,12 +11,23 @@ logger = logging.getLogger("diag_profundo")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 # Mantén consistencia con los otros módulos
-MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-mini")
+MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini")
 
 # Si DIAG_DEMO_ON_ERROR=1, ante error con OpenAI respondemos demo en lugar de 502
 DEMO_ON_ERROR = os.getenv("DIAG_DEMO_ON_ERROR", "1") == "1"
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+# Matriz de dependencias entre dominios (para roadmap inteligente)
+DOMAIN_DEPENDENCIES = {
+    "direccion": [],  # No depende de nada (base)
+    "finanzas": ["direccion"],  # Depende de dirección
+    "operaciones": ["direccion", "finanzas"],  # Depende de dirección y finanzas
+    "marketing_ventas": ["direccion", "rrhh"],  # Depende de dirección y RH
+    "rrhh": ["direccion"],  # Depende de dirección
+    "logistica": ["operaciones", "finanzas"],  # Depende de operaciones y finanzas
+    "innovacion": ["direccion", "operaciones", "rrhh"]  # Depende de múltiples áreas
+}
 
 # ---------------------------
 # Configuración de dominios
@@ -245,6 +256,72 @@ def _quick_template_by_domain(sev: str, label: str) -> Dict[str, Any]:
         "quick_wins": ["Checklist operativo semanal", "Hitos quincenales con tablero visible"],
     }
 
+def _generar_roadmap_inteligente(domains: Dict[str, Any]) -> Dict[str, Any]:
+    """Genera un roadmap inteligente considerando dependencias entre dominios"""
+    # Ordenar dominios por prioridad y dependencias
+    dominios_criticos = [d for d in domains.values() if d.get("prioridad") == "P1" and d.get("severidad") in ["Crítico", "Alto"]]
+    
+    # Construir orden sugerido basado en dependencias
+    orden_implementacion = []
+    dominios_procesados = set()
+    
+    def puede_procesar(dom_key: str) -> bool:
+        """Verifica si un dominio puede procesarse (sus dependencias ya están procesadas)"""
+        deps = DOMAIN_DEPENDENCIES.get(dom_key, [])
+        return all(dep in dominios_procesados for dep in deps)
+    
+    # Primero procesar dominios críticos
+    dominios_restantes = list(domains.keys())
+    
+    while dominios_restantes:
+        encontrado = False
+        for dom_key in dominios_restantes:
+            if puede_procesar(dom_key):
+                orden_implementacion.append(dom_key)
+                dominios_procesados.add(dom_key)
+                dominios_restantes.remove(dom_key)
+                encontrado = True
+                break
+        
+        if not encontrado:
+            # Si hay un ciclo o algo no esperado, agregar el primero restante
+            if dominios_restantes:
+                orden_implementacion.append(dominios_restantes[0])
+                dominios_procesados.add(dominios_restantes[0])
+                dominios_restantes.pop(0)
+            else:
+                break
+    
+    # Generar fases del roadmap
+    fases = {
+        "fase_1_30_dias": [],
+        "fase_2_60_dias": [],
+        "fase_3_90_dias": []
+    }
+    
+    # Distribuir dominios críticos en fases
+    for i, dom_key in enumerate(orden_implementacion[:3]):
+        if i == 0:
+            fases["fase_1_30_dias"].append(dom_key)
+        elif i == 1:
+            fases["fase_2_60_dias"].append(dom_key)
+        else:
+            fases["fase_3_90_dias"].append(dom_key)
+    
+    # Calcular impacto esperado
+    impacto_total = sum(d.get("score", 0) for d in domains.values() if d.get("prioridad") == "P1")
+    impacto_maximo_posible = len(domains) * 5
+    porcentaje_mejora_estimado = min(100, round((impacto_maximo_posible - impacto_total) / impacto_maximo_posible * 100, 1))
+    
+    return {
+        "orden_implementacion": orden_implementacion,
+        "fases": fases,
+        "ruta_critica": orden_implementacion[:3],  # Primeros 3 dominios críticos
+        "tiempo_estimado": f"{len(orden_implementacion) * 30} días",
+        "impacto_esperado": f"{porcentaje_mejora_estimado}% de mejora en score total",
+        "dominios_bloqueantes": [d for d in orden_implementacion[:2] if d in DOMAIN_DEPENDENCIES and DOMAIN_DEPENDENCIES[d]]
+    }
+
 def _build_rule_based_structure(domains: Dict[str, Any]) -> Dict[str, Any]:
     tabla = []
     detail = {}
@@ -316,7 +393,7 @@ def _sanitize_output(obj: Dict[str, Any], fallback_domains: Dict[str, Any]) -> D
 # ---------------------------
 # Prompt y llamada al LLM
 # ---------------------------
-def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any]) -> str:
+def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any], roadmap: Dict[str, Any] = None) -> str:
     activos = [v for v in domains.values() if v["prioridad"] in ("P1", "P2")]
     if not activos:
         activos = sorted(domains.values(), key=lambda x: x["score"])[:2]
@@ -340,25 +417,43 @@ def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any]) 
             campos_relevantes.add(k)
     subset = {k: diagnostico_data.get(k) for k in sorted(list(campos_relevantes))}
 
+    # Contexto de roadmap si está disponible
+    contexto_roadmap = ""
+    if roadmap:
+        ruta_critica = roadmap.get("ruta_critica", [])
+        if ruta_critica:
+            nombres_ruta = [domains.get(d, {}).get("nombre", d) for d in ruta_critica[:2]]
+            contexto_roadmap = f"\n📈 RUTA CRÍTICA SUGERIDA (orden de implementación): {', '.join(nombres_ruta)}. "
+            contexto_roadmap += f"Impacto esperado: {roadmap.get('impacto_esperado', 'N/A')}. "
+        dominios_bloq = roadmap.get("dominios_bloqueantes", [])
+        if dominios_bloq:
+            nombres_bloq = [domains.get(d, {}).get("nombre", d) for d in dominios_bloq[:1]]
+            contexto_roadmap += f"⚠️ DOMINIOS BLOQUEANTES (priorizar primero): {', '.join(nombres_bloq)}. "
+
     instrucciones = (
-        "Eres un CONSULTOR SENIOR. Redacta con precisión, foco y priorización.\n"
+        "Eres un CONSULTOR SENIOR EXPERTO en análisis empresarial y detección de patrones. "
+        "Considera dependencias entre áreas y efecto cascada. Redacta con precisión, foco y priorización.\n\n"
+        f"{contexto_roadmap}\n\n"
         "Genera un JSON con las claves:\n"
-        "1) analisis_detallado (string)\n"
-        "2) oportunidades_estrategicas (string[])\n"
-        "3) riesgos_identificados (string[])\n"
-        "4) plan_accion_sugerido (string[])\n"
-        "5) indicadores_clave_rendimiento (string[])\n"
+        "1) analisis_detallado (string): análisis profundo considerando correlaciones y dependencias\n"
+        "2) oportunidades_estrategicas (string[]): 3-5 oportunidades priorizadas por impacto sistémico\n"
+        "3) riesgos_identificados (string[]): 3-5 riesgos considerando efecto cascada entre dominios\n"
+        "4) plan_accion_sugerido (string[]): 4-6 acciones priorizadas considerando dependencias y orden sugerido\n"
+        "5) indicadores_clave_rendimiento (string[]): 4-6 KPIs que midan progreso sistémico\n"
         "6) estructura_consultiva (object) con:\n"
-        "   - resumen_ejecutivo (string)\n"
+        "   - resumen_ejecutivo (string): menciona correlaciones críticas si las detectas\n"
         "   - tabla_dominios (array<{dominio,nombre,score,severidad,prioridad}>)\n"
         "   - dominios (obj por dominio activo) con: diagnostico, causas_raiz[], recomendaciones_30_60_90{30,60,90}, kpis[], riesgos[], quick_wins[]\n"
+        "7) recomendaciones_innovadoras (opcional): 2-4 recomendaciones adicionales basadas en patrones detectados\n"
+        "8) siguiente_paso (opcional): próximo paso más importante según análisis\n"
         "NO agregues texto fuera del JSON. Tono consultivo, metas concretas, 2–4 bullets por lista."
     )
 
     user_prompt = {
         "contexto": {
             "dominios_activados": resumen_tabla,
-            "campos_relevantes": subset
+            "campos_relevantes": subset,
+            "roadmap_sugerido": roadmap.get("orden_implementacion", [])[:3] if roadmap else []
         },
         "instrucciones": instrucciones
     }
@@ -377,13 +472,18 @@ async def analizar_diagnostico_profundo(diagnostico_data: Dict[str, Any]) -> Dic
     """
     domains = _compute_domains(diagnostico_data)
 
+    # Generar roadmap inteligente
+    roadmap = _generar_roadmap_inteligente(domains)
+    
     # Modo DEMO si no hay API key
-    if not OPENAI_API_KEY:
+    if not OPENAI_API_KEY or not client:
         demo_struct = _build_rule_based_structure(domains)
-        return _sanitize_output({**_DEMO_TOP, "estructura_consultiva": demo_struct}, domains)
+        resultado = _sanitize_output({**_DEMO_TOP, "estructura_consultiva": demo_struct}, domains)
+        resultado["roadmap_inteligente"] = roadmap
+        return resultado
 
     try:
-        prompt = _make_llm_prompt(diagnostico_data, domains)
+        prompt = _make_llm_prompt(diagnostico_data, domains, roadmap)
 
         def _call():
             comp = client.chat.completions.create(
@@ -393,14 +493,42 @@ async def analizar_diagnostico_profundo(diagnostico_data: Dict[str, Any]) -> Dic
                     {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.2,
+                temperature=0.3,  # Un poco más alto para más creatividad
             )
             return comp
 
         completion = await asyncio.to_thread(_call)
         content = completion.choices[0].message.content or "{}"
         parsed = json.loads(content)
-        return _sanitize_output(parsed, domains)
+        resultado = _sanitize_output(parsed, domains)
+        
+        # Enriquecer con roadmap inteligente
+        resultado["roadmap_inteligente"] = roadmap
+        
+        # Agregar recomendaciones basadas en roadmap si no vienen del LLM
+        if not resultado.get("recomendaciones_innovadoras"):
+            recomendaciones_roadmap = []
+            if roadmap.get("dominios_bloqueantes"):
+                bloq = roadmap["dominios_bloqueantes"][0]
+                nombre_bloq = domains.get(bloq, {}).get("nombre", bloq)
+                recomendaciones_roadmap.append(f"🎯 PRIORIDAD MÁXIMA: {nombre_bloq} es bloqueante. Resuélvelo primero para desbloquear otras mejoras")
+            
+            if roadmap.get("ruta_critica"):
+                rutas = ", ".join([domains.get(d, {}).get("nombre", d) for d in roadmap["ruta_critica"][:2]])
+                recomendaciones_roadmap.append(f"📈 RUTA CRÍTICA: Enfócate en {rutas} para máximo impacto en {roadmap.get('tiempo_estimado', '90 días')}")
+            
+            if roadmap.get("impacto_esperado"):
+                recomendaciones_roadmap.append(f"🚀 POTENCIAL: {roadmap['impacto_esperado']} siguiendo el roadmap sugerido")
+            
+            if recomendaciones_roadmap:
+                resultado["recomendaciones_innovadoras"] = recomendaciones_roadmap
+        
+        if not resultado.get("siguiente_paso") and roadmap.get("orden_implementacion"):
+            primer_dom = roadmap["orden_implementacion"][0]
+            nombre_primer = domains.get(primer_dom, {}).get("nombre", primer_dom)
+            resultado["siguiente_paso"] = f"Inicia con {nombre_primer} (Fase 1 - 30 días). Es la base para desbloquear otras mejoras."
+        
+        return resultado
 
     except Exception as e:
         logger.exception("OpenAI error en analizar_diagnostico_profundo")
@@ -411,5 +539,7 @@ async def analizar_diagnostico_profundo(diagnostico_data: Dict[str, Any]) -> Dic
                 "analisis_detallado": f"[DEMO POR ERROR: {type(e).__name__}] " + _DEMO_TOP["analisis_detallado"],
                 "estructura_consultiva": demo_struct,
             }
-            return _sanitize_output(demo, domains)
+            resultado = _sanitize_output(demo, domains)
+            resultado["roadmap_inteligente"] = roadmap
+            return resultado
         raise HTTPException(status_code=502, detail=f"Fallo con OpenAI ({MODEL_NAME}): {e}")
