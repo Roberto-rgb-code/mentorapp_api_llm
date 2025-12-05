@@ -214,46 +214,47 @@ def _compute_domains(data: Dict[str, Any]) -> Dict[str, Any]:
 # DEMO / Fallback
 # ---------------------------
 _DEMO_TOP = {
-    "analisis_detallado": "Diagnóstico generado en modo DEMO (sin clave OpenAI o por error).",
+    "analisis_detallado": "¡Felicidades por completar este diagnóstico profundo! 🎉 Tu empresa muestra compromiso con la mejora continua, y eso ya es una gran fortaleza. Hemos identificado áreas donde ya estás haciendo un buen trabajo, y también oportunidades emocionantes para crecer aún más. Juntos vamos a trazar un camino claro hacia tus metas. ¡Vamos por ello! 💪",
     "oportunidades_estrategicas": [
-        "Estandarizar procesos críticos con tableros de control",
-        "Fortalecer flujo de caja y disciplina presupuestal",
-        "Profesionalizar gestión de talento y liderazgo intermedio",
+        "💡 Procesos: Gran oportunidad de estandarizar y ganar eficiencia con tableros de control",
+        "📊 Finanzas: Fortalecer el flujo de caja te dará tranquilidad y poder de decisión",
+        "👥 Talento: Profesionalizar la gestión de tu equipo multiplicará los resultados",
     ],
     "riesgos_identificados": [
-        "Dependencia de pocos clientes/proveedores",
-        "Tensión de liquidez por falta de presupuesto y cobranza reactiva",
+        "🛡️ Área a proteger: Diversificar base de clientes/proveedores para mayor estabilidad",
+        "💰 Punto de atención: Implementar rutinas de cobranza proactiva para mejor liquidez",
     ],
     "plan_accion_sugerido": [
-        "Implementar presupuesto operativo y flujo semanal (30 días)",
-        "Formalizar evaluación de desempeño y feedback trimestral (60 días)",
-        "Definir KPIs y rutinas de revisión mensual (90 días)",
+        "🚀 Te recomiendo empezar con un presupuesto operativo y flujo semanal (primeros 30 días)",
+        "💪 Un gran paso sería formalizar evaluaciones de desempeño trimestrales (60 días)",
+        "✨ Podrías definir KPIs claros y reuniones mensuales de revisión (90 días)",
     ],
-    "indicadores_clave_rendimiento": ["Margen bruto", "Ciclo de caja", "Rotación de personal", "NPS", "OTIF"],
+    "indicadores_clave_rendimiento": ["📈 Margen bruto", "💰 Ciclo de caja", "👥 Rotación de personal", "⭐ NPS (satisfacción)", "📦 OTIF (entregas)"],
+    "mensaje_motivacional": "¡Cada paso que das cuenta! El simple hecho de hacer este diagnóstico demuestra tu compromiso con el crecimiento. ¡Vas por excelente camino! 🌟"
 }
 
 def _quick_template_by_domain(sev: str, label: str) -> Dict[str, Any]:
-    pref = "Prioridad alta" if sev in ("Crítico", "Alto") else "Prioridad media"
+    pref = "Alta prioridad - ¡gran oportunidad de mejora!" if sev in ("Crítico", "Alto") else "Oportunidad de crecimiento"
     return {
-        "diagnostico": f"{label}: {pref}. Se observan brechas que requieren intervención inmediata para estabilizar resultados.",
+        "diagnostico": f"✨ {label}: {pref} Aquí hay potencial significativo para impulsar resultados. Con las acciones correctas, verás mejoras rápidas.",
         "causas_raiz": [
-            "Falta de estandarización y rutinas de control",
-            "Datos incompletos para decidir",
-            "Roles/propietarios difusos sobre los procesos clave",
+            "💡 Oportunidad: Estandarizar rutinas de control",
+            "📊 Área de mejora: Mejorar la disponibilidad de datos para decisiones",
+            "👥 Punto a trabajar: Clarificar roles y responsabilidades",
         ],
         "recomendaciones_30_60_90": {
-            "30": ["Definir objetivos claros y responsables", "Establecer tablero mínimo de control"],
-            "60": ["Documentar procesos críticos y capacitar al equipo", "Reuniones de seguimiento quincenal"],
-            "90": ["Medir impacto y ajustar metas trimestrales", "Escalar mejores prácticas"],
+            "30": ["🎯 Definir objetivos claros y asignar responsables", "📋 Crear un tablero mínimo de control"],
+            "60": ["📚 Documentar procesos críticos y capacitar al equipo", "🤝 Establecer reuniones de seguimiento quincenal"],
+            "90": ["📈 Medir impacto y ajustar metas", "🚀 Escalar las mejores prácticas a toda la organización"],
         },
         "kpis": [
-            {"nombre": "Cumplimiento de metas", "meta": "≥ 85% mensual"},
-            {"nombre": "Tiempo de ciclo", "meta": "−20% en 90 días"},
+            {"nombre": "✅ Cumplimiento de metas", "meta": "≥ 85% mensual"},
+            {"nombre": "⏱️ Tiempo de ciclo", "meta": "−20% en 90 días"},
         ],
         "riesgos": [
-            {"riesgo": "Falta de adopción", "mitigacion": "Acompañamiento con responsables y quick wins tempranos"}
+            {"riesgo": "Resistencia al cambio", "mitigacion": "💪 Involucrar al equipo desde el inicio y celebrar quick wins"}
         ],
-        "quick_wins": ["Checklist operativo semanal", "Hitos quincenales con tablero visible"],
+        "quick_wins": ["📋 Checklist operativo semanal", "🎯 Hitos quincenales con tablero visible"],
     }
 
 def _generar_roadmap_inteligente(domains: Dict[str, Any]) -> Dict[str, Any]:
@@ -430,23 +431,37 @@ def _make_llm_prompt(diagnostico_data: Dict[str, Any], domains: Dict[str, Any], 
             nombres_bloq = [domains.get(d, {}).get("nombre", d) for d in dominios_bloq[:1]]
             contexto_roadmap += f"⚠️ DOMINIOS BLOQUEANTES (priorizar primero): {', '.join(nombres_bloq)}. "
 
+    # Obtener nombre para personalizar
+    nombre_usuario = diagnostico_data.get("nombreSolicitante", "").split()[0] if diagnostico_data.get("nombreSolicitante") else ""
+    saludo = f"¡{nombre_usuario}! " if nombre_usuario else ""
+
     instrucciones = (
-        "Eres un CONSULTOR SENIOR EXPERTO en análisis empresarial y detección de patrones. "
-        "Considera dependencias entre áreas y efecto cascada. Redacta con precisión, foco y priorización.\n\n"
+        "Eres MentHIA, un MENTOR EMPRESARIAL EXPERTO con corazón. "
+        "Tu personalidad es CÁLIDA, PROFESIONAL y MOTIVADORA - como un mentor que genuinamente celebra los logros y guía con cariño en las áreas de mejora. "
+        "SIEMPRE empieza reconociendo las FORTALEZAS antes de hablar de oportunidades. "
+        "Usa emojis con moderación (1-2 por sección) para dar calidez. "
+        "Las recomendaciones deben sonar como consejos de un mentor que quiere verte triunfar.\n\n"
         f"{contexto_roadmap}\n\n"
         "Genera un JSON con las claves:\n"
-        "1) analisis_detallado (string): análisis profundo considerando correlaciones y dependencias\n"
-        "2) oportunidades_estrategicas (string[]): 3-5 oportunidades priorizadas por impacto sistémico\n"
-        "3) riesgos_identificados (string[]): 3-5 riesgos considerando efecto cascada entre dominios\n"
-        "4) plan_accion_sugerido (string[]): 4-6 acciones priorizadas considerando dependencias y orden sugerido\n"
-        "5) indicadores_clave_rendimiento (string[]): 4-6 KPIs que midan progreso sistémico\n"
+        f"1) analisis_detallado (string): {saludo}Empieza celebrando las fortalezas detectadas. "
+        "Luego explica las oportunidades de forma constructiva (no como críticas). "
+        "Usa un tono cercano: 'Tu empresa destaca en...', 'Hay una gran oportunidad en...', 'Juntos podemos mejorar...'. "
+        "Termina con una frase motivadora.\n"
+        "2) oportunidades_estrategicas (string[]): 3-5 oportunidades redactadas de forma POSITIVA. "
+        "Usa formato: '💡 [Área]: [Oportunidad emocionante]' en lugar de señalar fallos.\n"
+        "3) riesgos_identificados (string[]): 3-5 riesgos redactados como 'áreas a proteger' o 'puntos de atención'. "
+        "Evita lenguaje alarmista.\n"
+        "4) plan_accion_sugerido (string[]): 4-6 acciones con lenguaje motivador: "
+        "'🚀 Te recomiendo...', '💪 Un gran paso sería...', '✨ Podrías explorar...'\n"
+        "5) indicadores_clave_rendimiento (string[]): 4-6 KPIs explicados de forma simple y accesible.\n"
         "6) estructura_consultiva (object) con:\n"
-        "   - resumen_ejecutivo (string): menciona correlaciones críticas si las detectas\n"
-        "   - tabla_dominios (array<{dominio,nombre,score,severidad,prioridad}>)\n"
-        "   - dominios (obj por dominio activo) con: diagnostico, causas_raiz[], recomendaciones_30_60_90{30,60,90}, kpis[], riesgos[], quick_wins[]\n"
-        "7) recomendaciones_innovadoras (opcional): 2-4 recomendaciones adicionales basadas en patrones detectados\n"
-        "8) siguiente_paso (opcional): próximo paso más importante según análisis\n"
-        "NO agregues texto fuera del JSON. Tono consultivo, metas concretas, 2–4 bullets por lista."
+        "   - resumen_ejecutivo (string): Celebra fortalezas, menciona oportunidades con entusiasmo. Tono: '¡Excelente trabajo en X! Hay oportunidades emocionantes en Y'.\n"
+        "   - tabla_dominios (array)\n"
+        "   - dominios (obj por dominio) con: diagnostico (positivo primero), causas_raiz[], recomendaciones_30_60_90{}, kpis[], riesgos[], quick_wins[]\n"
+        "7) recomendaciones_innovadoras: 2-4 ideas creativas con emojis motivadores.\n"
+        "8) siguiente_paso: El paso más importante, redactado de forma emocionante.\n"
+        "9) mensaje_motivacional (nuevo): Frase de cierre positiva (ej: '¡Vas por excelente camino! Cada paso cuenta 🌟').\n"
+        "NO agregues texto fuera del JSON. Tono AMIGABLE y MOTIVADOR siempre."
     )
 
     user_prompt = {

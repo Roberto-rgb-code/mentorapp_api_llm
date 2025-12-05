@@ -175,23 +175,27 @@ async def analizar_diagnostico_emergencia(diagnostico_data: Dict[str, Any]) -> D
         recomendaciones_contextuales = _generar_recomendaciones_contextuales(
             riesgo, analisis_sentimiento, patrones_riesgo, diagnostico_data
         )
+        nombre = diagnostico_data.get("nombreSolicitante", "").split()[0] if diagnostico_data.get("nombreSolicitante") else ""
+        saludo = f"{nombre}, " if nombre else ""
         
         return {
-            "diagnostico_rapido": "Demo local sin OPENAI_API_KEY. Empresa en estrés de liquidez y caída de ventas.",
+            "diagnostico_rapido": f"{saludo}primero quiero que sepas que hay solución para esto 💪 Entiendo que estás pasando por un momento difícil con la liquidez y las ventas. La buena noticia es que muchas empresas han superado situaciones similares. Juntos vamos a encontrar el camino. Respira profundo - hay pasos claros que podemos tomar ahora mismo.",
             "acciones_inmediatas": [
-                "Congelar gastos no esenciales 14 días",
-                "Priorizar cobros críticos y renegociar pagos",
-                "Comunicar a clientes clave un plan de continuidad",
+                "🔥 PRIMERO: Congela gastos no esenciales por 14 días - esto te dará aire para pensar",
+                "💰 SEGUNDO: Contacta HOY a tus 3 mejores clientes para acelerar cobros pendientes",
+                "📞 TERCERO: Comunica a proveedores clave tu situación - la mayoría prefiere negociar que perder un cliente",
             ] + recomendaciones_contextuales[:2],
             "riesgo_general": riesgo,
             "recomendaciones_clave": [
-                "Proteger flujo de caja semanal",
-                "Ajustar capacidad operativa a demanda actual",
-                "Definir plan comercial de recuperación 30-60 días",
+                "💪 Podrías implementar un control de flujo de caja semanal - te dará tranquilidad",
+                "🎯 Te sugiero ajustar temporalmente la operación a la demanda actual",
+                "✨ Una buena estrategia sería armar un plan de recuperación comercial para los próximos 30-60 días",
             ] + recomendaciones_contextuales[2:],
             "analisis_sentimiento": analisis_sentimiento,
             "patrones_detectados": patrones_riesgo,
             "recomendaciones_innovadoras": recomendaciones_contextuales,
+            "siguiente_paso": "🎯 Tu siguiente paso más importante: Hoy mismo, antes de terminar el día, haz una lista de los 5 pagos más urgentes y los 5 cobros más fáciles de acelerar. ¡Esto te dará claridad inmediata!",
+            "mensaje_de_apoyo": "¡No estás solo en esto! 🌟 Muchos empresarios han pasado por tormentas similares y han salido más fuertes. El simple hecho de que estés buscando soluciones demuestra que tienes lo que se necesita para superar esto. ¡Cuenta con nosotros!"
         }
 
     # Construir prompt mejorado con contexto
@@ -204,26 +208,37 @@ async def analizar_diagnostico_emergencia(diagnostico_data: Dict[str, Any]) -> D
     riesgo_calculado = _calcular_riesgo_inteligente(diagnostico_data, analisis_sentimiento, patrones_riesgo)
     contexto_analisis += f"\nRiesgo calculado automáticamente: {riesgo_calculado} (usa esto como referencia pero valida con el análisis completo)."
 
+    # Obtener nombre para personalizar
+    nombre_usuario = diagnostico_data.get("nombreSolicitante", "").split()[0] if diagnostico_data.get("nombreSolicitante") else ""
+    saludo = f"{nombre_usuario}, " if nombre_usuario else ""
+
     user_prompt = (
-        "Eres un CONSULTOR DE CRISIS EMPRESARIAL EXPERTO. Analiza este diagnóstico de emergencia con enfoque en:\n"
-        "1. Identificar lo MÁS URGENTE en las próximas 24-72 horas\n"
-        "2. Detectar señales de riesgo sistémico (cascada de problemas)\n"
-        "3. Considerar el estado emocional del empresario (evitar decisiones reactivas)\n"
-        "4. Proponer acciones INMEDIATAS y ACCIONABLES\n\n"
+        "Eres MentHIA, un MENTOR DE CRISIS EMPRESARIAL con corazón. "
+        "Tu misión es ser un FARO DE CALMA en la tormenta. El empresario está pasando por un momento difícil y necesita sentir que NO ESTÁ SOLO. "
+        "Tu tono debe ser: TRANQUILIZADOR pero CLARO, EMPÁTICO pero PRÁCTICO, ESPERANZADOR pero REALISTA. "
+        "Usa frases como: 'Entiendo lo difícil que es esto...', 'Juntos vamos a salir adelante...', 'Hay solución para esto...'\n\n"
+        "Analiza este diagnóstico de emergencia con enfoque en:\n"
+        "1. PRIMERO tranquilizar y validar los sentimientos del empresario\n"
+        "2. Identificar lo MÁS URGENTE (próximas 24-72 horas)\n"
+        "3. Dar acciones CLARAS y ALCANZABLES (no abrumar)\n"
+        "4. Transmitir ESPERANZA realista\n\n"
         f"{contexto_analisis}\n\n"
         "Devuelve SOLO JSON con este esquema:\n"
-        "- diagnostico_rapido: resumen ejecutivo en 4–6 líneas, TONO DIRECTO Y CLARO. "
-        "Si detectas alto estrés, menciona la importancia de apoyo inmediato.\n"
-        "- acciones_inmediatas: 4–8 acciones CONCRETAS para las próximas 24–72 horas. "
-        "Prioriza por impacto/velocidad. Si hay flujo de caja crítico, primeras acciones deben ser financieras.\n"
+        f"- diagnostico_rapido: Empieza con '{saludo}primero quiero que sepas que hay solución para esto 💪'. "
+        "Luego resume la situación de forma CLARA pero NO alarmista. Termina con una frase de esperanza. "
+        "Si detectas alto estrés, incluye: 'Es normal sentirse abrumado, pero juntos vamos a encontrar el camino'.\n"
+        "- acciones_inmediatas: 4–6 acciones para las próximas 24–72 horas. "
+        "Usa formato amigable: '🔥 PRIMERO: ...', '💰 SEGUNDO: ...'. "
+        "Que sean ALCANZABLES para no abrumar. Si hay flujo de caja crítico, primeras acciones deben ser financieras.\n"
         "- riesgo_general: uno de ['bajo','moderado','alto','critico']. "
-        f"Considera que el riesgo calculado es: {riesgo_calculado}\n"
-        "- recomendaciones_clave: 4–8 recomendaciones de estabilización para 2–4 semanas. "
-        "Si detectas múltiples áreas críticas, prioriza las que pueden causar cascada de problemas.\n"
-        "- recomendaciones_innovadoras (opcional): 2–4 recomendaciones adicionales basadas en patrones detectados o casos similares.\n"
-        "- siguiente_paso (opcional): Una recomendación específica del próximo paso más importante.\n\n"
+        f"Considera: {riesgo_calculado}\n"
+        "- recomendaciones_clave: 4–6 recomendaciones para las próximas 2–4 semanas. "
+        "Usa lenguaje motivador: '💪 Podrías...', '🎯 Te sugiero...', '✨ Una buena estrategia sería...'\n"
+        "- recomendaciones_innovadoras: 2–3 ideas creativas o casos de éxito similares.\n"
+        "- siguiente_paso: EL paso más importante ahora mismo, redactado de forma motivadora.\n"
+        "- mensaje_de_apoyo: Una frase final de ánimo personalizada (ej: '¡No estás solo en esto! Muchos empresarios han pasado por situaciones similares y han salido adelante. Tú también puedes 🌟').\n\n"
         f"Datos del diagnóstico de emergencia:\n{json.dumps(diagnostico_data, ensure_ascii=False, indent=2)}\n\n"
-        "Responde EXCLUSIVAMENTE con JSON válido."
+        "Recuerda: el empresario necesita sentir APOYO y CLARIDAD. Responde SOLO con JSON válido."
     )
 
     try:
@@ -233,12 +248,12 @@ async def analizar_diagnostico_emergencia(diagnostico_data: Dict[str, Any]) -> D
                 messages=[
                     {
                         "role": "system",
-                        "content": "Eres un consultor de crisis empresarial experto. Responde solo con JSON válido. Sé directo, preciso y accionable."
+                        "content": "Eres MentHIA, un mentor de crisis empresarial con corazón. Tu misión es ser un faro de calma y esperanza. Responde solo con JSON válido. Sé claro, empático y tranquilizador. El empresario necesita sentir que hay solución y que no está solo."
                     },
                     {"role": "user", "content": user_prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.3,  # Un poco más alto para más creatividad en recomendaciones
+                temperature=0.4,  # Un poco más alto para más calidez en las respuestas
             )
             return completion.choices[0].message.content
 

@@ -229,27 +229,30 @@ async def analizar_diagnostico_general(diagnostico_data: Dict[str, Any]) -> Dict
         correlaciones = _analizar_correlaciones(diagnostico_data)
         predicciones = _predecir_tendencias(diagnostico_data, correlaciones, avg, nivel)
         recomendaciones_inteligentes = _generar_recomendaciones_inteligentes(correlaciones, predicciones, diagnostico_data)
+        nombre = diagnostico_data.get("nombreSolicitante", "").split()[0] if diagnostico_data.get("nombreSolicitante") else ""
+        saludo = f"¡Hola {nombre}! " if nombre else "¡Hola! "
         
         return {
-            "resumen_ejecutivo": "Demo local sin OPENAI_API_KEY. Se detectan oportunidades en planeación, finanzas y marketing.",
+            "resumen_ejecutivo": f"{saludo}Gracias por completar el diagnóstico 🎉 Tu empresa muestra potencial en varias áreas, y juntos identificamos oportunidades emocionantes para crecer. Las áreas de planeación, finanzas y marketing tienen espacio para brillar aún más. ¡Vamos a lograrlo! 💪",
             "areas_oportunidad": [
-                "Definición y seguimiento de objetivos (OKR)",
-                "Control y proyección de flujo de caja",
-                "Estandarización de procesos operativos",
-                "Definición de ICP y canal comercial",
+                "💡 Gran oportunidad: Definir objetivos claros (OKR) para alinear a todo el equipo",
+                "📊 Potencial de mejora: Control y proyección de flujo de caja para mayor tranquilidad",
+                "⚙️ Área de crecimiento: Estandarizar procesos operativos para escalar mejor",
+                "🎯 Oportunidad estratégica: Definir tu cliente ideal y canales de venta óptimos",
             ],
             "recomendaciones_clave": [
-                "Implantar tablero semanal con KPIs",
-                "Auditar gastos y renegociar costos",
-                "Documentar procesos críticos (SOPs)",
-                "Campañas con propuesta de valor segmentada",
+                "🚀 Te recomiendo empezar con un tablero semanal de KPIs - ¡te dará claridad inmediata!",
+                "💰 Un gran paso sería revisar tus gastos y renegociar con proveedores",
+                "📋 Podrías documentar tus procesos críticos - tu equipo te lo agradecerá",
+                "📣 Considera campañas enfocadas en tu propuesta de valor única",
             ],
             "puntuacion_madurez_promedio": avg,
             "nivel_madurez_general": nivel,
             "recomendaciones_innovadoras": recomendaciones_inteligentes,
             "correlaciones_detectadas": correlaciones.get("correlaciones", []),
             "predicciones": predicciones.get("predicciones", []),
-            "siguiente_paso": predicciones.get("recomendacion_prioritaria") and f"Prioriza acciones en {predicciones['recomendacion_prioritaria']}"
+            "siguiente_paso": f"🎯 Tu próximo gran paso: Enfócate en {predicciones.get('recomendacion_prioritaria', 'definir objetivos claros')} - ¡es donde verás el mayor impacto!",
+            "mensaje_motivacional": "¡Recuerda que identificar áreas de mejora es señal de un líder inteligente! Cada pequeño paso cuenta. ¡Tú puedes! 🌟"
         }
 
     # Análisis inteligente local
@@ -271,10 +274,19 @@ async def analizar_diagnostico_general(diagnostico_data: Dict[str, Any]) -> Dict
         if pred_importante and pred_importante.get("impacto") != "bajo":
             contexto_inteligente += f"\n📊 PREDICCIÓN: {pred_importante.get('descripcion', '')}. "
 
+    # Obtener nombre del usuario para personalizar
+    nombre_usuario = diagnostico_data.get("nombreSolicitante", "").split()[0] if diagnostico_data.get("nombreSolicitante") else ""
+    saludo_personalizado = f"¡Hola {nombre_usuario}! " if nombre_usuario else ""
+
     system_msg = {
         "role": "system",
         "content": (
-            "Eres un CONSULTOR DE NEGOCIOS EXPERTO con experiencia en análisis predictivo y detección de patrones. "
+            "Eres MentHIA, un CONSULTOR DE NEGOCIOS AMIGABLE Y EXPERTO. "
+            "Tu personalidad es CÁLIDA, CERCANA y MOTIVADORA - como un mentor que genuinamente se preocupa por el éxito del empresario. "
+            "NUNCA uses lenguaje frío o corporativo. Habla como un amigo experto que quiere ver crecer al usuario. "
+            "Usa emojis con moderación (1-2 por sección) para dar calidez. "
+            "Celebra las fortalezas antes de mencionar áreas de mejora. "
+            "Las recomendaciones deben sonar como consejos de un amigo, no como órdenes. "
             "Responde EXCLUSIVAMENTE con JSON válido. "
             "El JSON debe cumplir el siguiente contrato:\n"
             "{\n"
@@ -284,7 +296,8 @@ async def analizar_diagnostico_general(diagnostico_data: Dict[str, Any]) -> Dict
             '  "puntuacion_madurez_promedio": number,\n'
             '  "nivel_madurez_general": "muy_bajo"|"bajo"|"medio"|"alto"|"muy_alto",\n'
             '  "recomendaciones_innovadoras" (opcional): string[],\n'
-            '  "siguiente_paso" (opcional): string\n'
+            '  "siguiente_paso" (opcional): string,\n'
+            '  "mensaje_motivacional" (opcional): string\n'
             "}\n"
             "Nada de texto fuera de JSON."
         ),
@@ -293,28 +306,31 @@ async def analizar_diagnostico_general(diagnostico_data: Dict[str, Any]) -> Dict
     user_msg = {
         "role": "user",
         "content": (
-            "Analiza este diagnóstico general empresarial. Considera:\n"
-            "1. Identificar áreas más débiles y su impacto en otras áreas (efecto cascada)\n"
-            "2. Detectar correlaciones entre problemas en diferentes áreas\n"
-            "3. Priorizar recomendaciones por impacto y velocidad de implementación\n\n"
+            "Analiza este diagnóstico general empresarial de forma AMIGABLE y MOTIVADORA. Considera:\n"
+            "1. Primero reconoce lo que está haciendo BIEN el empresario (celebra sus fortalezas)\n"
+            "2. Luego identifica áreas de oportunidad de forma constructiva (no como críticas)\n"
+            "3. Las recomendaciones deben sonar como consejos de un amigo experto\n\n"
             f"{contexto_inteligente}\n\n"
             "Devuelve SOLO el JSON con:\n"
-            "- resumen_ejecutivo: breve, claro y accionable. Menciona correlaciones si las detectas.\n"
-            "- areas_oportunidad: 4–8 puntos concretos. Prioriza las que tienen mayor impacto sistémico.\n"
-            "- recomendaciones_clave: 4–8 acciones prácticas (0-90 días). Primera recomendación debe ser la de mayor prioridad.\n"
-            "- puntuacion_madurez_promedio: número. Usa el cálculo sugerido: {avg}\n"
+            f"- resumen_ejecutivo: {saludo_personalizado}Empieza reconociendo algo positivo, luego menciona las oportunidades. "
+            "Usa un tono cercano como: 'Tu empresa tiene grandes fortalezas en X, y hay oportunidades emocionantes para crecer en Y'. "
+            "Termina con una frase motivadora.\n"
+            "- areas_oportunidad: 4–8 puntos. Redáctalos de forma POSITIVA (ej: '💡 Gran oportunidad: mejorar X para lograr Y' en lugar de 'Falta X').\n"
+            "- recomendaciones_clave: 4–8 acciones. Usa lenguaje amigable como: '🚀 Te recomiendo...', '💪 Un gran paso sería...', '✨ Podrías explorar...'\n"
+            "- puntuacion_madurez_promedio: número. Usa: {avg}\n"
             "- nivel_madurez_general: {nivel}\n"
-            "- recomendaciones_innovadoras (opcional): 2–4 recomendaciones adicionales basadas en patrones detectados.\n"
-            "- siguiente_paso (opcional): Próximo paso más importante según el análisis.\n\n"
+            "- recomendaciones_innovadoras: 2–4 ideas creativas con emojis motivadores.\n"
+            "- siguiente_paso: El próximo paso MÁS IMPORTANTE, redactado de forma motivadora.\n"
+            "- mensaje_motivacional: Una frase de cierre positiva y alentadora (ej: '¡Vas por muy buen camino! Cada paso cuenta 🌟').\n\n"
             "Interpretación Likert:\n"
-            "1: Difuso; 2: Ocasional; 3: Regular sin procesos; 4: Correcto y estandarizado; 5: Excelente y automatizado.\n\n"
-            f"Área más débil detectada: {correlaciones.get('area_mas_debil', {}).get('nombre', 'N/A')} "
+            "1: Área con mucho potencial de mejora; 2: En desarrollo; 3: Base sólida para crecer; 4: Muy bien establecido; 5: ¡Excelente!\n\n"
+            f"Área con mayor oportunidad: {correlaciones.get('area_mas_debil', {}).get('nombre', 'N/A')} "
             f"(score: {correlaciones.get('area_mas_debil', {}).get('score', 'N/A')})\n"
-            f"Área más fuerte: {correlaciones.get('area_mas_fuerte', {}).get('nombre', 'N/A')} "
+            f"Fortaleza destacada: {correlaciones.get('area_mas_fuerte', {}).get('nombre', 'N/A')} "
             f"(score: {correlaciones.get('area_mas_fuerte', {}).get('score', 'N/A')})\n\n"
             "Datos completos:\n"
             f"{datos_fmt}\n\n"
-            "Recuerda: responde SOLO con JSON válido."
+            "Recuerda: tono AMIGABLE y MOTIVADOR. Responde SOLO con JSON válido."
         ).format(avg=avg, nivel=nivel),
     }
 
