@@ -2,6 +2,10 @@ import os
 from xai_sdk import Client
 from xai_sdk.chat import system, user
 import asyncio
+from dotenv import load_dotenv
+
+# Carga variables de entorno (usa .env)
+load_dotenv()
 
 # Inicializa cliente Grok (xAI)
 client = Client(

@@ -6,6 +6,10 @@ import asyncio
 from typing import Dict, Any, List
 from fastapi import HTTPException
 from openai import OpenAI
+from dotenv import load_dotenv
+
+# Carga variables de entorno (usa .env)
+load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o")

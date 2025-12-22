@@ -126,8 +126,19 @@ async def chatbot_ayuda(request: Request):
     message = data.get("message")
     if not message:
         raise HTTPException(400, "No se recibió mensaje")
+    
+    # Contexto adicional para mejorar las respuestas
+    contexto = data.get("contexto", "")
+    pregunta_actual = data.get("preguntaActual", "")
+    
+    # Enriquecer el mensaje con contexto si está disponible
+    mensaje_enriquecido = message
+    if pregunta_actual:
+        mensaje_enriquecido = f"Contexto: El usuario está respondiendo la pregunta del diagnóstico: '{pregunta_actual}'. Área: {contexto}. Pregunta del usuario: {message}"
+    
     try:
-        reply = await chat_grok_ayuda(message)
+        reply = await chat_grok_ayuda(mensaje_enriquecido)
         return {"reply": reply}
-    except Exception:
+    except Exception as e:
+        print(f"Error en chatbot-ayuda: {e}")
         return {"reply": "Ocurrió un error con el asistente de ayuda. Intenta más tarde."}
