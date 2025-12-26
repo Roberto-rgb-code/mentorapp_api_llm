@@ -1,8 +1,8 @@
 fastapi
 uvicorn
 openai
-python-multipart  # Para aceptar archivos en endpoints
+python-multipart
 pydantic
 fpdf
 python-dotenv
-xai-sdk
+httpx

@@ -2,6 +2,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 import io
+import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 
 # IMPORTA TUS FUNCIONES DEL LLM Y PDF
 from app.llm_openai import (
@@ -15,14 +20,14 @@ from app.llm_general import analizar_diagnostico_general
 from app.llm_profundo import analizar_diagnostico_profundo
 from app.llm_emergencia import analizar_diagnostico_emergencia
 
-# IMPORTA LAS FUNCIONES DE LOS CHATBOTS
+# IMPORTA LAS FUNCIONES DE LOS CHATBOTS (ahora usan OpenAI)
 from app.llm_grok import chat_grok
-from app.llm_grok_ayuda import chat_grok_ayuda  # <-- nuevo import
+from app.llm_grok_ayuda import chat_grok_ayuda
 
 app = FastAPI(
     title="MentorApp LLM Backend",
-    description="API para análisis y reporte de diagnósticos empresariales",
-    version="1.0.0",
+    description="API para análisis y reporte de diagnósticos empresariales con OpenAI",
+    version="2.0.0",
 )
 
 # Habilita CORS
@@ -35,11 +40,16 @@ app.add_middleware(
 
 @app.get("/")
 def ping():
-    return {"status": "ok", "msg": "MentorApp backend online."}
+    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
+    return {
+        "status": "ok",
+        "msg": "MentorApp LLM backend online.",
+        "openai_configured": openai_configured,
+        "model": os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini")
+    }
 
 @app.head("/")
 def ping_head():
-    # Útil para plataformas que hacen HEAD health-checks
     return JSONResponse(content=None, status_code=200)
 
 # ---------------- Diagnóstico "simple" (histórico / pdf) ----------------

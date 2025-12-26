@@ -1,19 +1,22 @@
 import os
 import json
 from dotenv import load_dotenv
-from openai import OpenAI, OpenAIError
+from openai import OpenAI
 from fpdf import FPDF
-import io
 
-# Carga variables de entorno (usa .env)
+# Carga variables de entorno
 load_dotenv()
 
 # Inicializa cliente OpenAI
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
+MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # ----------- FUNCIÓN: ANALIZAR DIAGNÓSTICO -----------
 async def analizar_diagnostico(data):
+    if not client:
+        return {"error": "OpenAI no configurado", "details": "Configura OPENAI_API_KEY"}
+    
     prompt = (
         "Eres un consultor experto. Analiza este diagnóstico empresarial recibido en formato JSON.\n"
         f"Diagnóstico:\n{json.dumps(data, ensure_ascii=False)}\n"
@@ -22,7 +25,7 @@ async def analizar_diagnostico(data):
     )
     try:
         resp = client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=MODEL_NAME,
             messages=[{"role": "system", "content": prompt}]
         )
         content = resp.choices[0].message.content
@@ -33,6 +36,9 @@ async def analizar_diagnostico(data):
 
 # ----------- FUNCIÓN: ANALIZAR HISTÓRICO -----------
 async def analizar_historico(diagnosticos):
+    if not client:
+        return {"error": "OpenAI no configurado", "details": "Configura OPENAI_API_KEY"}
+    
     prompt = (
         "Recibiste la siguiente evolución de diagnósticos empresariales (JSON array):\n"
         f"{json.dumps(diagnosticos, ensure_ascii=False)}\n"
@@ -42,7 +48,7 @@ async def analizar_historico(diagnosticos):
     )
     try:
         resp = client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=MODEL_NAME,
             messages=[{"role": "system", "content": prompt}]
         )
         content = resp.choices[0].message.content
@@ -61,18 +67,22 @@ async def generar_reporte_pdf(diagnostico):
         f"Diagnóstico:\n{json.dumps(diagnostico, ensure_ascii=False)}\n"
         "Formato de respuesta JSON: {'areas':[{'nombre':'', 'semaforo':''}], 'resumen':''}"
     )
-    try:
-        resp = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "system", "content": prompt}]
-        )
-        info = json.loads(resp.choices[0].message.content)
-    except Exception as e:
-        print(f"OpenAI error (PDF): {e}")
-        info = {
-            "resumen": "No se pudo analizar el diagnóstico por un error del modelo.",
-            "areas": []
-        }
+    
+    info = {"resumen": "Diagnóstico pendiente de análisis.", "areas": []}
+    
+    if client:
+        try:
+            resp = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[{"role": "system", "content": prompt}]
+            )
+            info = json.loads(resp.choices[0].message.content)
+        except Exception as e:
+            print(f"OpenAI error (PDF): {e}")
+            info = {
+                "resumen": "No se pudo analizar el diagnóstico por un error del modelo.",
+                "areas": []
+            }
 
     # Generar PDF
     pdf = FPDF()
