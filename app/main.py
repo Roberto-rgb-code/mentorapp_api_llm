@@ -24,6 +24,9 @@ from app.llm_emergencia import analizar_diagnostico_emergencia
 from app.llm_grok import chat_grok
 from app.llm_grok_ayuda import chat_grok_ayuda
 
+# IMPORTA VISION PARA ANÁLISIS DE DOCUMENTOS
+from app.llm_vision import analyze_document_with_vision, analyze_document_fallback
+
 app = FastAPI(
     title="MentorApp LLM Backend",
     description="API para análisis y reporte de diagnósticos empresariales con OpenAI",
@@ -152,3 +155,92 @@ async def chatbot_ayuda(request: Request):
     except Exception as e:
         print(f"Error en chatbot-ayuda: {e}")
         return {"reply": "Ocurrió un error con el asistente de ayuda. Intenta más tarde."}
+
+# ---------------- Vision - Análisis de Documentos ----------------
+
+@app.post("/api/documents/analyze")
+async def analyze_document(request: Request):
+    """
+    Analiza un documento/imagen usando OpenAI Vision (GPT-4o)
+    
+    Body esperado:
+    {
+        "image_base64": "base64 de la imagen (opcional)",
+        "image_url": "URL de la imagen (opcional)",
+        "document_type": "financial|report|image|general",
+        "mime_type": "image/jpeg|image/png|...",
+        "diagnostic_context": {
+            "empresa": "nombre",
+            "sector": "sector",
+            "areaActual": "área del diagnóstico"
+        }
+    }
+    """
+    data = await request.json()
+    
+    image_base64 = data.get("image_base64")
+    image_url = data.get("image_url")
+    document_type = data.get("document_type", "general")
+    mime_type = data.get("mime_type", "image/jpeg")
+    diagnostic_context = data.get("diagnostic_context")
+    
+    if not image_base64 and not image_url:
+        raise HTTPException(400, "Se requiere image_base64 o image_url")
+    
+    result = await analyze_document_with_vision(
+        image_base64=image_base64,
+        image_url=image_url,
+        document_type=document_type,
+        mime_type=mime_type,
+        diagnostic_context=diagnostic_context
+    )
+    
+    if not result.get("success"):
+        # Intentar fallback
+        filename = data.get("filename", "documento")
+        file_type = mime_type
+        fallback = analyze_document_fallback(filename, file_type, diagnostic_context)
+        return fallback
+    
+    return result
+
+@app.post("/api/documents/analyze-batch")
+async def analyze_documents_batch(request: Request):
+    """
+    Analiza múltiples documentos en lote
+    
+    Body esperado:
+    {
+        "documents": [
+            {
+                "id": "doc1",
+                "image_base64": "...",
+                "document_type": "financial"
+            },
+            ...
+        ],
+        "diagnostic_context": {...}
+    }
+    """
+    data = await request.json()
+    documents = data.get("documents", [])
+    diagnostic_context = data.get("diagnostic_context")
+    
+    if not documents:
+        raise HTTPException(400, "Lista de documentos vacía")
+    
+    results = []
+    for doc in documents:
+        result = await analyze_document_with_vision(
+            image_base64=doc.get("image_base64"),
+            image_url=doc.get("image_url"),
+            document_type=doc.get("document_type", "general"),
+            mime_type=doc.get("mime_type", "image/jpeg"),
+            diagnostic_context=diagnostic_context
+        )
+        results.append({
+            "id": doc.get("id"),
+            "result": result
+        })
+    
+    return {"results": results}
