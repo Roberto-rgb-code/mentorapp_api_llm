@@ -84,6 +84,7 @@ Respuesta esperada:
 * **POST `/api/diagnostico/analyze`** — Analiza un diagnóstico (OpenAI)
 * **POST `/api/diagnostico/historico`** — Análisis histórico de diagnósticos
 * **POST `/api/diagnostico/reporte-pdf`** — Genera un reporte PDF
+* **POST `/api/consultants/validate`** — Valida un perfil de consultor mediante IA (ver [CONSULTANT_VALIDATION_README.md](./CONSULTANT_VALIDATION_README.md))
 
 ---
 
@@ -128,6 +129,7 @@ Respuesta esperada:
 * `.gitignore` — Ignora `venv/`, `__pycache__/`, `.env` y archivos temporales.
 * `Dockerfile` — Contenedor listo para producción o desarrollo.
 * `requirements.txt` — Dependencias Python.
+* `CONSULTANT_VALIDATION_README.md` — Documentación del sistema de validación de consultores.
 
 ---
 

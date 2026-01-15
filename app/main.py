@@ -27,6 +27,9 @@ from app.llm_grok_ayuda import chat_grok_ayuda
 # IMPORTA VISION PARA ANÁLISIS DE DOCUMENTOS
 from app.llm_vision import analyze_document_with_vision, analyze_document_fallback
 
+# IMPORTA VALIDACIÓN DE CONSULTORES
+from app.llm_consultant_validation import validar_consultor
+
 app = FastAPI(
     title="MentorApp LLM Backend",
     description="API para análisis y reporte de diagnósticos empresariales con OpenAI",
@@ -238,9 +241,87 @@ async def analyze_documents_batch(request: Request):
             mime_type=doc.get("mime_type", "image/jpeg"),
             diagnostic_context=diagnostic_context
         )
-        results.append({
-            "id": doc.get("id"),
-            "result": result
-        })
+    results.append({
+        "id": doc.get("id"),
+        "result": result
+    })
     
     return {"results": results}
+
+# ---------------- Validación de Consultores ----------------
+
+@app.post("/api/consultants/validate")
+async def validate_consultant(request: Request):
+    """
+    Valida un perfil de consultor usando IA según el prompt maestro de MentHIA.
+    
+    Body esperado:
+    {
+        "form_data": {
+            "fullName": "...",
+            "email": "...",
+            "professionalName": "...",
+            "languages": ["español", "inglés"],
+            "linkedin": "https://linkedin.com/in/...",
+            "website": "https://...",
+            "professionalType": "consultor_independiente" | "ejecutivo_activo" | ...,
+            "specializationAreas": ["Estrategia", "Finanzas"],
+            "experienceDescription": "...",
+            "totalYearsExperience": 15,
+            "consultingYearsExperience": 10,
+            "companyTypes": ["PYMES", "Medianas"],
+            "industries": ["Servicios", "Manufactura"],
+            "certifications": ["..."],
+            "achievements": "...",
+            "hasExecutiveRoles": true,
+            "executiveRolesDetails": "...",
+            "hasPublicSpeaking": true,
+            "publicSpeakingDetails": "...",
+            "publicReferences": ["https://..."],
+            "serviceTypes": ["Diagnósticos", "Sesiones 1 a 1"],
+            "motivation": "...",
+            "weeklyAvailability": 10,
+            "aiOpenness": "si" | "si_con_acompanamiento" | "no",
+            "aiOpennessReason": "...",
+            "currentTools": ["CRM", "Herramientas de análisis"]
+        },
+        "public_data": {
+            "linkedin_info": "...",
+            "website_info": "...",
+            "articles": ["..."],
+            "events": ["..."]
+        }
+    }
+    
+    Returns:
+    {
+        "resumen_ejecutivo_ia": "...",
+        "trust_score": 88,
+        "nivel_sugerido": "consultor_senior",
+        "desglose_dimensiones": {
+            "experiencia": 27,
+            "especializacion": 16,
+            "reputacion": 15,
+            "enfoque_pyme": 13,
+            "afinidad_ia": 9,
+            "riesgos": 0
+        },
+        "riesgos_detectados": ["Ninguno"],
+        "recomendacion_final": "APROBAR",
+        "justificacion": "..."
+    }
+    """
+    data = await request.json()
+    
+    form_data = data.get("form_data", {})
+    public_data = data.get("public_data")
+    
+    if not form_data:
+        raise HTTPException(400, "Se requiere form_data con los datos del consultor")
+    
+    try:
+        result = await validar_consultor(form_data, public_data)
+        return result
+    except Exception as e:
+        print(f"Error en validación de consultor: {e}")
+        raise HTTPException(500, f"Error al validar consultor: {str(e)}")
