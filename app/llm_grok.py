@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 # Carga variables de entorno
 load_dotenv()
 
-# Prompt del asistente Platia - basado en vistas públicas
-SYSTEM_PROMPT = """Eres Platia, el asistente inteligente de la plataforma.
+# Prompt del asistente MentHIA - basado en vistas públicas
+SYSTEM_PROMPT = """Eres MentHIA, el asistente inteligente de la plataforma.
 
 ## QUÉ ES PLATIA
-Platia es un ecosistema que combina asesores humanos reales e inteligencia artificial para ayudar a PYMES y emprendedores a tomar mejores decisiones y crecer con estrategias accionables.
+MentHIA es un ecosistema que combina asesores humanos reales e inteligencia artificial para ayudar a PYMES y emprendedores a tomar mejores decisiones y crecer con estrategias accionables.
 
 ## SERVICIOS PRINCIPALES
 
@@ -51,9 +51,9 @@ QUICK_RESPONSES = {
     'mentor': 'La mentoría 1 a 1 te conecta con un especialista para resolver un reto concreto. Si me dices tu objetivo, te sugiero el mejor enfoque.',
     'asesoria': 'Ofrecemos mentoría 1 a 1 con especialistas en finanzas, marketing, operaciones, estrategia y más. Si tienes dudas del proceso, revisa las FAQs.',
     'diagnostico': 'El diagnóstico te ayuda a entender tu situación y priorizar acciones. Si me dices tu principal reto, te guío con el siguiente paso.',
-    'como funciona': 'Platia funciona así: inicias con un diagnóstico y, si necesitas profundizar, avanzas con mentoría 1 a 1. Para dudas de uso y políticas, revisa las FAQs.',
-    'que es platia': 'Platia es una plataforma que combina asesores reales e inteligencia artificial para ayudar a PYMES a crecer con decisiones basadas en datos y acciones claras.',
-    'hola': 'Hola, soy Platia. ¿Qué necesitas hoy: diagnóstico, mentoría 1 a 1 o dudas de la plataforma (FAQs)?',
+    'como funciona': 'MentHIA funciona así: inicias con un diagnóstico y, si necesitas profundizar, avanzas con mentoría 1 a 1. Para dudas de uso y políticas, revisa las FAQs.',
+    'que es platia': 'MentHIA es una plataforma que combina asesores reales e inteligencia artificial para ayudar a PYMES a crecer con decisiones basadas en datos y acciones claras.',
+    'hola': 'Hola, soy MentHIA. ¿Qué necesitas hoy: diagnóstico, mentoría 1 a 1 o dudas de la plataforma (FAQs)?',
     'ayuda': '¡Claro que te ayudo! Puedo: 1) Explicarte nuestros servicios 2) Guiarte en la plataforma 3) Resolver dudas empresariales 4) Recomendarte consultores. ¿Qué necesitas?',
     'gracias': '¡De nada! Estoy aquí para ayudarte. Si tienes más dudas, no dudes en preguntar. ¡Éxito con tu empresa!',
     'curso': 'La capacitación digital está en “próximamente”. Si me dices qué quieres aprender, te doy una guía práctica para empezar.',
@@ -70,7 +70,7 @@ def get_quick_response(message: str) -> str | None:
 
 
 async def chat_grok(message: str) -> str:
-    """Chat principal de Platia usando OpenAI"""
+    """Chat principal de MentHIA usando OpenAI"""
     
     # 1. Intentar respuesta rápida (instantánea)
     quick = get_quick_response(message)
