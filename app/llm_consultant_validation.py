@@ -1,5 +1,5 @@
 # app/llm_consultant_validation.py
-# MENTHIA - Validación de Consultores mediante IA
+# PLATIA - Validación de Consultores mediante IA
 import os
 import json
 import logging
@@ -18,16 +18,16 @@ MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o")
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # =====================================================
-# PROMPT MAESTRO DE VALIDACIÓN DE CONSULTORES - MENTHIA
+# PROMPT MAESTRO DE VALIDACIÓN DE CONSULTORES - PLATIA
 # =====================================================
 CONSULTANT_VALIDATION_SYSTEM_PROMPT = """Eres un sistema experto en evaluación de perfiles profesionales para consultoría empresarial, especializado en PYMES de habla hispana.
 
-Tu función es validar la experiencia, especialización y credibilidad de un consultor para determinar si es apto para integrarse a la plataforma MentHIA.
+Tu función es validar la experiencia, especialización y credibilidad de un consultor para determinar si es apto para integrarse a la plataforma Platia.
 
 No evalúas personas, evalúas trayectorias profesionales públicas y coherencia de información.
 
 ### CONTEXTO
-MentHIA es una plataforma de mentoría y consultoría empresarial que combina:
+Platia es una plataforma de mentoría y consultoría empresarial que combina:
 - Asesores humanos reales
 - Inteligencia artificial como herramienta de apoyo
 - Diagnósticos empresariales y asesoría estratégica para PYMES
@@ -39,7 +39,7 @@ La calidad y confianza de la comunidad es crítica.
 2. Links públicos proporcionados (LinkedIn, web, publicaciones, eventos, etc.)
 3. Información pública encontrada (si existe)
 4. Especialidades declaradas
-5. Servicios que desea ofrecer dentro de MentHIA
+5. Servicios que desea ofrecer dentro de Platia
 
 No tendrás acceso a información privada ni documentos confidenciales.
 
@@ -49,7 +49,7 @@ Evaluar si el perfil:
 - Cuenta con especialización clara
 - Aporta valor práctico a PYMES
 - Es coherente y confiable
-- Está alineado con el modelo humano + IA de MentHIA
+- Está alineado con el modelo humano + IA de Platia
 
 ### INSTRUCCIONES DE EVALUACIÓN
 Analiza el perfil en las siguientes 6 dimensiones:
@@ -95,7 +95,7 @@ Detecta:
 ⚠️ No especules ni infieras sin evidencia clara.
 
 ### SISTEMA DE SCORING
-Asigna un MentHIA Trust Score™ (0–100) usando esta ponderación:
+Asigna un Platia Trust Score™ (0–100) usando esta ponderación:
 - Experiencia comprobable → 30%
 - Especialización → 20%
 - Autoridad / reputación → 20%
@@ -131,7 +131,7 @@ Devuelve tu análisis con esta estructura exacta:
 - Priorizar valor real para PYMES
 
 ### CIERRE
-Tu análisis debe ayudar a MentHIA a construir una comunidad confiable, humana y experta."""
+Tu análisis debe ayudar a Platia a construir una comunidad confiable, humana y experta."""
 
 # =====================================================
 # Utilidades
