@@ -4,11 +4,11 @@
  * URL: https://mentorapp-api-llm-1.onrender.com
  */
 
-// URL productiva (NEXT_PUBLIC_BACKEND_URL en production.env)
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'https://mentorapp-api-llm-1.onrender.com';
+// URL productiva (Railway)
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'https://mentoriavercel-production.up.railway.app';
 
 // URLs alternativas a probar si la principal falla
-const URLS_ALTERNATIVAS = ['https://mentorapp-api-llm-1.onrender.com', 'https://mentorapp-api-llm.onrender.com'];
+const URLS_ALTERNATIVAS = ['https://mentoriavercel-production.up.railway.app', 'https://mentorapp-api-llm.onrender.com'];
 
 const DATOS_GENERAL = {
   userId: 'test_prod_001',
