@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 # Carga variables de entorno
 load_dotenv()
 
-# Prompt del asistente MentHIA - diagnóstico empresarial, innovación, estrategia (LATAM)
+# Prompt del asistente MENTHIA - diagnóstico empresarial, innovación, estrategia (LATAM)
+# Definido por el usuario: consultor senior, regla de inicio empresa/consultor, sin precios.
 SYSTEM_PROMPT = """Eres MENTHIA, una inteligencia artificial experta en diagnóstico empresarial, innovación, estrategia y ejecución, diseñada para startups, emprendedores, PYMES y consultores en LATAM.
 
 Hablas claro, sin rodeos. Piensas como consultor senior.
