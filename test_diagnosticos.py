@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Script de prueba para los 3 diagnósticos empresariales
-Prueba: emergencia, general y profundo
+Script de prueba para los diagnósticos empresariales
+Prueba: emergencia, general (API y Mentoria), profundo
 """
+import sys
+import io
+
+# Fix encoding en Windows para emojis
+if sys.platform == "win32":
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+    except Exception:
+        pass
 
 import asyncio
 import json
@@ -49,7 +60,7 @@ DATOS_EMERGENCIA = {
     "createdAt": datetime.now().isoformat()
 }
 
-# Datos de prueba para Diagnóstico General
+# Datos de prueba para Diagnóstico General (formato API nativo: dg_, fa_, etc.)
 DATOS_GENERAL = {
     "userId": "test_user_002",
     "nombreSolicitante": "María González",
@@ -109,6 +120,37 @@ DATOS_GENERAL = {
     "lc_principalObstaculoCadenaSuministro": "Falta de coordinación entre áreas",
     "lc_areaMayorAtencionOperacion": "Mejorar comunicación entre equipos",
     
+    "createdAt": datetime.now().isoformat()
+}
+
+# Datos de prueba para Diagnóstico General - FORMATO MENTORIA (respuestas con A-E)
+DATOS_GENERAL_MENTORIA = {
+    "userId": "test_user_mentoria",
+    "nombreSolicitante": "Ana Martínez",
+    "nombreEmpresa": "Consultoría Mentoria SA",
+    "sector": "Servicios",
+    "numeroEmpleados": "15",
+    "respuestas": {
+        "estrategia_1": "C",
+        "estrategia_2": "B",
+        "estrategia_3": "C",
+        "estrategia_4": "D",
+        "estrategia_5": "B",
+        "finanzas_1": "D",
+        "finanzas_2": "C",
+        "finanzas_3": "C",
+        "finanzas_4": "D",
+        "finanzas_5": "B",
+        "marketing_1": "C",
+        "marketing_2": "B",
+        "marketing_3": "C",
+        "operaciones_1": "D",
+        "operaciones_2": "C",
+        "talento_1": "D",
+        "talento_2": "C",
+        "tecnologia_1": "C",
+        "escalabilidad_1": "B",
+    },
     "createdAt": datetime.now().isoformat()
 }
 
@@ -403,6 +445,26 @@ async def test_general():
         traceback.print_exc()
         return False
 
+async def test_general_mentoria():
+    """Prueba el diagnóstico general con formato Mentoria (respuestas A-E)"""
+    print_section("PRUEBA: DIAGNÓSTICO GENERAL (FORMATO MENTORIA)")
+    try:
+        resultado = await analizar_diagnostico_general(DATOS_GENERAL_MENTORIA)
+        print_result("general", resultado)
+
+        assert "resumen_ejecutivo" in resultado, "❌ Falta 'resumen_ejecutivo'"
+        assert "areas_oportunidad" in resultado, "❌ Falta 'areas_oportunidad'"
+        assert "nivel_madurez_general" in resultado, "❌ Falta 'nivel_madurez_general'"
+        assert resultado["nivel_madurez_general"] in ["muy_bajo", "bajo", "medio", "alto", "muy_alto"], "❌ Nivel inválido"
+
+        print("✅ Validación: Formato Mentoria procesado correctamente")
+        return True
+    except Exception as e:
+        print(f"❌ ERROR en diagnóstico general Mentoria: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 async def test_profundo():
     """Prueba el diagnóstico profundo"""
     print_section("PRUEBA: DIAGNÓSTICO PROFUNDO")
@@ -435,6 +497,7 @@ async def main():
     resultados = {
         "emergencia": False,
         "general": False,
+        "general_mentoria": False,
         "profundo": False
     }
     
@@ -442,8 +505,12 @@ async def main():
     resultados["emergencia"] = await test_emergencia()
     await asyncio.sleep(1)  # Pausa entre pruebas
     
-    # Prueba 2: General
+    # Prueba 2: General (formato API)
     resultados["general"] = await test_general()
+    await asyncio.sleep(1)
+
+    # Prueba 2b: General formato Mentoria (respuestas A-E)
+    resultados["general_mentoria"] = await test_general_mentoria()
     await asyncio.sleep(1)
     
     # Prueba 3: Profundo
@@ -451,21 +518,21 @@ async def main():
     
     # Resumen final
     print_section("RESUMEN DE PRUEBAS")
-    print(f"✅ Emergencia: {'PASÓ' if resultados['emergencia'] else 'FALLÓ'}")
-    print(f"✅ General: {'PASÓ' if resultados['general'] else 'FALLÓ'}")
-    print(f"✅ Profundo: {'PASÓ' if resultados['profundo'] else 'FALLÓ'}")
+    for nombre, res in resultados.items():
+        print(f"✅ {nombre}: {'PASÓ' if res else 'FALLÓ'}")
     
     total_pasados = sum(1 for v in resultados.values() if v)
-    print(f"\n📊 Total: {total_pasados}/3 pruebas pasaron")
+    total_pruebas = len(resultados)
+    print(f"\n📊 Total: {total_pasados}/{total_pruebas} pruebas pasaron")
     
-    if total_pasados == 3:
+    if total_pasados == total_pruebas:
         print("\n🎉 ¡TODAS LAS PRUEBAS PASARON EXITOSAMENTE!")
     else:
         print("\n⚠️ Algunas pruebas fallaron. Revisa los errores arriba.")
     
     print(f"\n⏰ Fin: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     
-    return total_pasados == 3
+    return total_pasados == total_pruebas
 
 if __name__ == "__main__":
     try:

@@ -215,13 +215,62 @@ def _respuesta_fallback(diagnostico_data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 # =====================================================
+# Mapper: formato Mentoria (respuestas) -> formato API (dg_, fa_, etc.)
+# =====================================================
+BLOQUE_TO_PREFIX = {
+    "estrategia": "dg_",
+    "finanzas": "fa_",
+    "marketing": "mv_",
+    "operaciones": "op_",
+    "talento": "rh_",
+    "tecnologia": "lc_",
+    "escalabilidad": "dg_",
+}
+LETRA_A_NUMERO = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5}
+
+
+def _convertir_formato_mentoria(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convierte respuestas del frontend Mentoria (estrategia_1: 'A', etc.)
+    al formato esperado por llm_general (dg_X: 1, fa_X: 2, etc.).
+    """
+    respuestas = data.get("respuestas")
+    if not respuestas or not isinstance(respuestas, dict):
+        return data
+
+    result = dict(data)
+    converted: Dict[str, int] = {}
+    for key, val in respuestas.items():
+        if not isinstance(key, str) or "_" not in key:
+            continue
+        bloque, num = key.split("_", 1)
+        prefix = BLOQUE_TO_PREFIX.get(bloque.lower())
+        if not prefix:
+            continue
+        num_val = LETRA_A_NUMERO.get(str(val).upper()) if isinstance(val, str) else None
+        if num_val is None and str(val) in {"1", "2", "3", "4", "5"}:
+            num_val = int(val)
+        if num_val is not None:
+            new_key = f"{prefix}q{num}"
+            converted[new_key] = num_val
+
+    for k, v in converted.items():
+        result[k] = str(v)
+    return result
+
+
+# =====================================================
 # Analizador principal
 # =====================================================
 async def analizar_diagnostico_general(diagnostico_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Analiza los datos de un diagnóstico empresarial general usando OpenAI (gpt-4o).
+    Acepta dos formatos:
+    1) API nativo: dg_X, fa_X, op_X, mv_X, rh_X, lc_X con valores 1-5
+    2) Mentoria: respuestas con estrategia_N, finanzas_N, etc. y valores A-E
     """
-    
+    # Normalizar formato Mentoria si aplica
+    diagnostico_data = _convertir_formato_mentoria(diagnostico_data)
     # Fallback si no hay API key
     if not OPENAI_API_KEY or not client:
         return _respuesta_fallback(diagnostico_data)

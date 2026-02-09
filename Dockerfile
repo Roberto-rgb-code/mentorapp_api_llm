@@ -16,8 +16,9 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 # Copiar el resto del código
 COPY . .
 
-# Exponer el puerto donde corre FastAPI
+# Puerto (Railway inyecta PORT; local usa 8000)
+ENV PORT=8000
 EXPOSE 8000
 
-# Comando para correr la app
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Comando: usa $PORT en Railway, 8000 local
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
