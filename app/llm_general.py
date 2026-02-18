@@ -505,6 +505,7 @@ DATOS DEL DIAGNÓSTICO:
 {datos_fmt}
 
 Genera el diagnóstico ejecutivo completo siguiendo la estructura JSON especificada.
+IMPORTANTE: Tu diagnóstico debe basarse ÚNICAMENTE en las respuestas y datos proporcionados arriba. No inventes datos ni asumas información no indicada. Cada hallazgo o recomendación debe poder trazarse a una respuesta concreta del cuestionario.
 Usa Capa 1 y Capa 2 en tu narrativa. Sé directo, práctico y accionable. Nada de motivación vacía."""
 
     try:
