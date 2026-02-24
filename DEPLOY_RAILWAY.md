@@ -2,6 +2,13 @@
 
 Guía paso a paso para migrar el backend de Render a Railway.
 
+## ⚠️ URL correcta
+
+La URL debe ser del **API LLM** (este repo Python/FastAPI), NO del frontend Next.js.  
+- ❌ `mentoriavercel-production.up.railway.app` = suele ser el frontend Next.js (incorrecto)  
+- ✅ Conecta el repo **Roberto-rgb-code/mentorapp_api_llm** en Railway (Root Directory: vacío/raíz)  
+- En Vercel, usa **MENTORAPP_LLM_API_URL** = `https://tu-api-llm.up.railway.app`
+
 ---
 
 ## Requisitos previos

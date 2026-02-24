@@ -89,36 +89,40 @@ async def report_pdf(payload: dict):
 # ---------------- Nuevos diagnósticos ----------------
 
 @app.post("/api/diagnostico/general/analyze")
-async def analyze_general_diagnosis(data: dict):
+async def analyze_general_diagnosis(request: Request):
     """
     Analiza los datos de un diagnóstico general utilizando el LLM específico.
     """
-    if not data:
+    data = await request.json()
+    if not data or (isinstance(data, dict) and not data):
         raise HTTPException(400, "Datos del diagnóstico general vacíos")
     return await analizar_diagnostico_general(data)
 
 # Ruta legacy para compatibilidad con llamadas antiguas (con guion)
 @app.post("/api/diagnostico/general-analyze")
-async def analyze_general_diagnosis_legacy(data: dict):
-    if not data:
+async def analyze_general_diagnosis_legacy(request: Request):
+    data = await request.json()
+    if not data or (isinstance(data, dict) and not data):
         raise HTTPException(400, "Datos del diagnóstico general vacíos")
     return await analizar_diagnostico_general(data)
 
 @app.post("/api/diagnostico/profundo/analyze")
-async def analyze_profundo_diagnosis(data: dict):
+async def analyze_profundo_diagnosis(request: Request):
     """
     Analiza los datos de un diagnóstico profundo utilizando el LLM específico.
     """
-    if not data:
+    data = await request.json()
+    if not data or (isinstance(data, dict) and not data):
         raise HTTPException(400, "Datos del diagnóstico profundo vacíos")
     return await analizar_diagnostico_profundo(data)
 
 @app.post("/api/diagnostico/emergencia/analyze")
-async def analyze_emergencia_diagnosis(data: dict):
+async def analyze_emergencia_diagnosis(request: Request):
     """
     Analiza los datos de un diagnóstico de emergencia utilizando el LLM específico.
     """
-    if not data:
+    data = await request.json()
+    if not data or (isinstance(data, dict) and not data):
         raise HTTPException(400, "Datos del diagnóstico de emergencia vacíos")
     return await analizar_diagnostico_emergencia(data)
 
