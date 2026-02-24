@@ -13,12 +13,13 @@ COPY requirements.txt ./
 # Instalar dependencias
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copiar el resto del código
+# Copiar el resto del código (incluye start.sh)
 COPY . .
+RUN chmod +x start.sh
 
 # Puerto (Railway inyecta PORT; local usa 8000)
 ENV PORT=8000
 EXPOSE 8000
 
-# Comando: usa $PORT en Railway, 8000 local
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Script lee PORT del entorno (evita error "$PORT is not a valid integer")
+CMD ["./start.sh"]
