@@ -135,26 +135,55 @@ def get_quick_response(message: str) -> str | None:
     return None
 
 
-async def chat_grok(message: str) -> str:
-    """Chat principal de MentHIA usando OpenAI"""
-    
-    # 1. Intentar respuesta rápida (instantánea)
-    quick = get_quick_response(message)
-    if quick:
-        return quick
-    
-    # 2. Usar OpenAI para respuestas más complejas
+# xAI (Grok) usa el mismo formato que OpenAI: chat/completions
+XAI_CHAT_URL = "https://api.x.ai/v1/chat/completions"
+
+
+async def _chat_xai(message: str) -> str | None:
+    """Llama a Grok (xAI). Devuelve None si falla o no hay key."""
+    api_key = os.getenv("XAI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(
+                XAI_CHAT_URL,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+                json={
+                    "model": os.getenv("XAI_MODEL_NAME", "grok-2"),
+                    "temperature": 0.7,
+                    "max_tokens": 400,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": message},
+                    ],
+                },
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data["choices"][0]["message"]["content"].strip()
+            print(f"xAI/Grok error: {response.status_code} {response.text[:200]}")
+            return None
+    except Exception as e:
+        print(f"xAI/Grok chat error: {e}")
+        return None
+
+
+async def _chat_openai(message: str) -> str | None:
+    """Llama a OpenAI. Devuelve None si falla o no hay key."""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return "El asistente no está disponible. Por favor contacta a soporte: contacto@ment-hia.com"
-    
+        return None
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}"
+                    "Authorization": f"Bearer {api_key}",
                 },
                 json={
                     "model": os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"),
@@ -162,16 +191,42 @@ async def chat_grok(message: str) -> str:
                     "max_tokens": 400,
                     "messages": [
                         {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": message}
-                    ]
-                }
+                        {"role": "user", "content": message},
+                    ],
+                },
             )
             if response.status_code == 200:
                 data = response.json()
                 return data["choices"][0]["message"]["content"].strip()
-            else:
-                print(f"OpenAI error: {response.status_code}")
-                return "Ocurrió un error temporal. Intenta de nuevo o contáctanos: contacto@ment-hia.com"
+            print(f"OpenAI error: {response.status_code}")
+            return None
     except Exception as e:
-        print(f"Chat error: {e}")
-        return "El asistente no está disponible temporalmente. Contáctanos: contacto@ment-hia.com"
+        print(f"OpenAI chat error: {e}")
+        return None
+
+
+async def chat_grok(message: str) -> str:
+    """Chat principal de MentHIA: usa Grok (xAI) si XAI_API_KEY está configurada, si no OpenAI."""
+    # 1. Respuesta rápida (instantánea)
+    quick = get_quick_response(message)
+    if quick:
+        return quick
+
+    # 2. Preferir Grok (xAI) si hay XAI_API_KEY; si no, OpenAI
+    xai_key = os.getenv("XAI_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+
+    if xai_key:
+        reply = await _chat_xai(message)
+        if reply:
+            return reply
+        if openai_key:
+            reply = await _chat_openai(message)
+            if reply:
+                return reply
+    elif openai_key:
+        reply = await _chat_openai(message)
+        if reply:
+            return reply
+
+    return "El asistente no está disponible. Por favor contacta a soporte: contacto@ment-hia.com"

@@ -458,24 +458,44 @@ async def analizar_diagnostico_general(diagnostico_data: Dict[str, Any]) -> Dict
     1) API nativo: dg_X, fa_X, op_X, mv_X, rh_X, lc_X con valores 1-5
     2) Mentoria: respuestas con estrategia_N, finanzas_N, etc. y valores A-E
     """
-    # Normalizar formato Mentoria si aplica
-    diagnostico_data = _convertir_formato_mentoria(diagnostico_data)
-    # Fallback si no hay API key
+    if not isinstance(diagnostico_data, dict):
+        diagnostico_data = {}
+
+    try:
+        diagnostico_data = _convertir_formato_mentoria(diagnostico_data)
+    except Exception:
+        pass
+
     if not OPENAI_API_KEY or not client:
         return _respuesta_fallback(diagnostico_data)
 
-    # Modelo gradual: puntajes por sección, Capa 1 (percentil) y Capa 2 (índice por sección)
-    puntajes_sec, clasif_sec, puntaje_total, capa1, capa2 = _calcular_puntajes_por_seccion(diagnostico_data)
-    if puntajes_sec and puntaje_total > 0:
-        avg = round((puntaje_total / 20.0), 2)
-        nivel = _nivel_madurez_desde_puntaje_100(puntaje_total)
-    else:
+    puntajes_sec: List[float] = []
+    clasif_sec: List[str] = []
+    puntaje_total = 0.0
+    capa1, capa2 = "Sin referencia", "En el promedio"
+    avg, nivel = 0.0, "muy_bajo"
+
+    try:
+        puntajes_sec, clasif_sec, puntaje_total, capa1, capa2 = _calcular_puntajes_por_seccion(diagnostico_data)
+        if puntajes_sec and puntaje_total > 0:
+            avg = round((puntaje_total / 20.0), 2)
+            nivel = _nivel_madurez_desde_puntaje_100(puntaje_total)
+        else:
+            avg, nivel = _extraer_likert(diagnostico_data)
+            puntaje_total = avg * 20.0
+            capa1, capa2 = "Sin referencia", "En el promedio"
+    except Exception:
         avg, nivel = _extraer_likert(diagnostico_data)
         puntaje_total = avg * 20.0
-        capa1, capa2 = "Sin referencia", "En el promedio"
 
-    correlaciones = _analizar_correlaciones(diagnostico_data)
-    datos_fmt = _formatear_datos_para_prompt(diagnostico_data)
+    try:
+        correlaciones = _analizar_correlaciones(diagnostico_data)
+    except Exception:
+        correlaciones = {}
+    try:
+        datos_fmt = _formatear_datos_para_prompt(diagnostico_data)
+    except Exception:
+        datos_fmt = str(diagnostico_data)
 
     contexto_capa = ""
     if puntajes_sec and clasif_sec:

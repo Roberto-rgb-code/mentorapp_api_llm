@@ -80,7 +80,7 @@ Respuesta esperada:
 
 ### Endpoints principales
 
-* **POST `/api/chatbot`** — Chat LLM asistente MentorApp
+* **POST `/api/chatbot`** — Chat LLM (Grok/xAI si XAI_API_KEY, si no OpenAI)
 * **POST `/api/diagnostico/analyze`** — Analiza un diagnóstico (OpenAI)
 * **POST `/api/diagnostico/historico`** — Análisis histórico de diagnósticos
 * **POST `/api/diagnostico/reporte-pdf`** — Genera un reporte PDF
