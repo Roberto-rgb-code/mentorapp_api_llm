@@ -46,12 +46,12 @@ app.add_middleware(
 
 @app.get("/")
 def ping():
-    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
+    anthropic_configured = bool(os.getenv("ANTHROPIC_API_KEY"))
     return {
         "status": "ok",
-        "msg": "MentorApp LLM backend online.",
-        "openai_configured": openai_configured,
-        "model": os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini")
+        "msg": "MentorApp LLM backend online (Anthropic Claude 3 Opus).",
+        "anthropic_configured": anthropic_configured,
+        "model": os.getenv("ANTHROPIC_MODEL_NAME", "claude-3-opus-20240229")
     }
 
 @app.head("/")
