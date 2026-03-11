@@ -49,9 +49,9 @@ def ping():
     anthropic_configured = bool(os.getenv("ANTHROPIC_API_KEY"))
     return {
         "status": "ok",
-        "msg": "MentorApp LLM backend online (Anthropic Claude 3.5 Sonnet).",
+        "msg": "MentorApp LLM backend online (Anthropic Claude Sonnet 4).",
         "anthropic_configured": anthropic_configured,
-        "model": os.getenv("ANTHROPIC_MODEL_NAME", "claude-3-5-sonnet-20241022")
+        "model": os.getenv("ANTHROPIC_MODEL_NAME", "claude-sonnet-4-20250514")
     }
 
 @app.head("/")
