@@ -583,6 +583,7 @@ IMPORTANTE: Tu respuesta final debe ser el JSON de salida directamente, sin deli
 
     except Exception as e:
         # Fallback en caso de error
+        print(f"[llm_general] CRITICAL ERROR calling Anthropic: {str(e)}")
         fallback = _respuesta_fallback(diagnostico_data)
         fallback["resumen_ejecutivo"] = f"Error al analizar con llm ({MODEL_NAME}): {str(e)}. " + fallback["resumen_ejecutivo"]
         return fallback
