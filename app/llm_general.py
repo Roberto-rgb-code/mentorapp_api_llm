@@ -5,16 +5,16 @@ import os
 import json
 from typing import Dict, Any, List, Tuple
 from fastapi import HTTPException
-from openai import OpenAI
+from anthropic import Anthropic
 from dotenv import load_dotenv
 
 # Carga variables de entorno (usa .env)
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+MODEL_NAME = os.getenv("ANTHROPIC_MODEL_NAME", "claude-3-opus-20240229")
 
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
 # =====================================================
 # MODELO DE CALIFICACIÓN GRADUAL - MAPAS Y FÓRMULAS
@@ -233,13 +233,10 @@ Usa ambas capas: el percentil (Capa 1) da benchmarking real; el índice por secc
   "oportunidades": ["máx 5, accionables y concretas"],
   "riesgos": ["máx 3, críticos"],
   "prioridades_30_dias": ["acciones de alto impacto y bajo esfuerzo para los próximos 30 días"],
-  "nivel_madurez": "valor 1–5 con explicación de por qué",
   "comentarios_adicionales": "insights o alertas que el empresario debe conocer",
   "resumen_ejecutivo": "versión amigable del diagnóstico para el frontend",
   "areas_oportunidad": ["lista de áreas con oportunidad de mejora"],
   "recomendaciones_clave": ["recomendaciones principales"],
-  "puntuacion_madurez_promedio": número del 1-5 (o equivalente según escala 0-100 normalizado a 1-5),
-  "nivel_madurez_general": "muy_bajo|bajo|medio|alto|muy_alto",
   "recomendaciones_innovadoras": ["ideas innovadoras o disruptivas"],
   "siguiente_paso": "el paso más importante a tomar ahora"
 }
@@ -466,7 +463,7 @@ async def analizar_diagnostico_general(diagnostico_data: Dict[str, Any]) -> Dict
     except Exception:
         pass
 
-    if not OPENAI_API_KEY or not client:
+    if not ANTHROPIC_API_KEY or not client:
         return _respuesta_fallback(diagnostico_data)
 
     puntajes_sec: List[float] = []
@@ -524,23 +521,32 @@ CONTEXTO ADICIONAL:{contexto_correlaciones}
 DATOS DEL DIAGNÓSTICO:
 {datos_fmt}
 
-Genera el diagnóstico ejecutivo completo siguiendo la estructura JSON especificada.
-IMPORTANTE: Tu diagnóstico debe basarse ÚNICAMENTE en las respuestas y datos proporcionados arriba. No inventes datos ni asumas información no indicada. Cada hallazgo o recomendación debe poder trazarse a una respuesta concreta del cuestionario.
-Usa Capa 1 y Capa 2 en tu narrativa. Sé directo, práctico y accionable. Nada de motivación vacía."""
+Genera el diagnóstico ejecutivo completo siguiendo la estructura JSON especificada en el system prompt.
+IMPORTANTE: Tu respuesta final debe ser el JSON de salida directamente, sin delimitadores ```json ni comentarios extra. No incluyas los campos `puntuacion_madurez_promedio` ni `nivel_madurez_general`, esos se calcularan externamente. Tu salida es ÚNICAMENTE tu interpretación."""
 
     try:
-        completion = client.chat.completions.create(
+        response = client.messages.create(
             model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": MENTHIA_SYSTEM_PROMPT},
-                {"role": "user", "content": user_msg}
-            ],
-            response_format={"type": "json_object"},
+            system=MENTHIA_SYSTEM_PROMPT,
+            max_tokens=4000,
             temperature=0.35,
+            messages=[
+                {"role": "user", "content": user_msg}
+            ]
         )
 
-        content = completion.choices[0].message.content or "{}"
-        parsed = json.loads(content)
+        content = response.content[0].text or "{}"
+        
+        # Limpieza por si Claude incluye markdown a pesar de la instrucción
+        content_clean = content.strip()
+        if content_clean.startswith("```json"):
+            content_clean = content_clean[7:]
+        if content_clean.startswith("```"):
+            content_clean = content_clean[3:]
+        if content_clean.endswith("```"):
+            content_clean = content_clean[:-3]
+        
+        parsed = json.loads(content_clean.strip())
 
         # Validación y enriquecimiento
         if not isinstance(parsed.get("resumen_ejecutivo", ""), str):
@@ -554,22 +560,15 @@ Usa Capa 1 y Capa 2 en tu narrativa. Sé directo, práctico y accionable. Nada d
         parsed["areas_oportunidad"] = _as_list_str(parsed.get("areas_oportunidad") or parsed.get("oportunidades", []))
         parsed["recomendaciones_clave"] = _as_list_str(parsed.get("recomendaciones_clave") or parsed.get("prioridades_30_dias", []))
         
-        # Usar cálculos locales si el modelo no los devuelve correctamente
-        parsed["puntuacion_madurez_promedio"] = float(parsed.get("puntuacion_madurez_promedio", avg or 0.0))
-        parsed["nivel_madurez_general"] = str(parsed.get("nivel_madurez_general", nivel or "muy_bajo"))
-        
-        if parsed["nivel_madurez_general"] not in {"muy_bajo", "bajo", "medio", "alto", "muy_alto"}:
-            parsed["nivel_madurez_general"] = nivel
-        
-        if parsed["puntuacion_madurez_promedio"] <= 0.0 and avg > 0.0:
-            parsed["puntuacion_madurez_promedio"] = avg
-            parsed["nivel_madurez_general"] = nivel
+        # Inserción FORZADA y DETERMINISTA de los cálculos algorítmicos.
+        # Quitamos la responsabilidad de esto al LLM y nos fiamos 100% de la matemática (Capa 1/2) local.
+        parsed["puntuacion_madurez_promedio"] = float(avg or 0.0)
+        parsed["nivel_madurez_general"] = str(nivel or "muy_bajo")
         
         # Enriquecer con análisis local
         if correlaciones.get("correlaciones"):
             parsed["correlaciones_detectadas"] = correlaciones["correlaciones"]
-        parsed["puntuacion_madurez_promedio"] = float(parsed.get("puntuacion_madurez_promedio", avg or 0.0))
-        parsed["nivel_madurez_general"] = str(parsed.get("nivel_madurez_general", nivel or "muy_bajo"))
+            
         if puntajes_sec and clasif_sec:
             parsed["diagnostico_capa1_percentil"] = capa1
             parsed["diagnostico_capa2_indice"] = capa2
@@ -582,5 +581,5 @@ Usa Capa 1 y Capa 2 en tu narrativa. Sé directo, práctico y accionable. Nada d
     except Exception as e:
         # Fallback en caso de error
         fallback = _respuesta_fallback(diagnostico_data)
-        fallback["resumen_ejecutivo"] = f"Error al analizar con OpenAI ({MODEL_NAME}): {str(e)}. " + fallback["resumen_ejecutivo"]
+        fallback["resumen_ejecutivo"] = f"Error al analizar con llm ({MODEL_NAME}): {str(e)}. " + fallback["resumen_ejecutivo"]
         return fallback

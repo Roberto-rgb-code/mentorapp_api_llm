@@ -6,3 +6,4 @@ pydantic
 fpdf
 python-dotenv
 httpx
+anthropic
