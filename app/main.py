@@ -93,9 +93,18 @@ async def analyze_general_diagnosis(request: Request):
     """
     Analiza los datos de un diagnóstico general utilizando el LLM específico.
     """
-    data = await request.json()
+    try:
+        data = await request.json()
+    except Exception as e:
+        body_bytes = await request.body()
+        print(f"[main] ERROR parsing JSON: {str(e)}")
+        print(f"[main] Raw body was: {body_bytes.decode('utf-8', errors='replace')}")
+        raise HTTPException(400, f"Error decodificando JSON: {str(e)}")
+
     if not data or (isinstance(data, dict) and not data):
         raise HTTPException(400, "Datos del diagnóstico general vacíos")
+    
+    print(f"[main] Recibida petición para Diagnóstico General. UserID: {data.get('userId', 'unknown')}")
     return await analizar_diagnostico_general(data)
 
 # Ruta legacy para compatibilidad con llamadas antiguas (con guion)

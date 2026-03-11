@@ -141,7 +141,7 @@ XAI_CHAT_URL = "https://api.x.ai/v1/chat/completions"
 
 async def _chat_xai(message: str) -> str | None:
     """Llama a Grok (xAI). Devuelve None si falla o no hay key."""
-    api_key = os.getenv("XAI_API_KEY")
+    api_key = os.getenv("XAI_API_KEY", "").strip().strip('"').strip("'")
     if not api_key:
         return None
     try:
@@ -153,7 +153,7 @@ async def _chat_xai(message: str) -> str | None:
                     "Authorization": f"Bearer {api_key}",
                 },
                 json={
-                    "model": os.getenv("XAI_MODEL_NAME", "grok-2"),
+                    "model": os.getenv("XAI_MODEL_NAME", "grok-2").strip().strip('"').strip("'"),
                     "temperature": 0.7,
                     "max_tokens": 400,
                     "messages": [
@@ -174,7 +174,7 @@ async def _chat_xai(message: str) -> str | None:
 
 async def _chat_openai(message: str) -> str | None:
     """Llama a OpenAI. Devuelve None si falla o no hay key."""
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY", "").strip().strip('"').strip("'")
     if not api_key:
         return None
     try:
@@ -186,7 +186,7 @@ async def _chat_openai(message: str) -> str | None:
                     "Authorization": f"Bearer {api_key}",
                 },
                 json={
-                    "model": os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"),
+                    "model": os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini").strip().strip('"').strip("'"),
                     "temperature": 0.7,
                     "max_tokens": 400,
                     "messages": [
@@ -213,8 +213,8 @@ async def chat_grok(message: str) -> str:
         return quick
 
     # 2. Preferir Grok (xAI) si hay XAI_API_KEY; si no, OpenAI
-    xai_key = os.getenv("XAI_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
+    xai_key = os.getenv("XAI_API_KEY", "").strip().strip('"').strip("'")
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip().strip('"').strip("'")
 
     if xai_key:
         reply = await _chat_xai(message)

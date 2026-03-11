@@ -11,8 +11,8 @@ from dotenv import load_dotenv
 # Carga variables de entorno (usa .env)
 load_dotenv()
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-MODEL_NAME = os.getenv("ANTHROPIC_MODEL_NAME", "claude-3-opus-20240229")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")
+MODEL_NAME = os.getenv("ANTHROPIC_MODEL_NAME", "claude-3-opus-20240229").strip().strip('"').strip("'")
 
 client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
@@ -464,7 +464,10 @@ async def analizar_diagnostico_general(diagnostico_data: Dict[str, Any]) -> Dict
         pass
 
     if not ANTHROPIC_API_KEY or not client:
+        print(f"[llm_general] WARNING: Anthropic no configurado (key vacía={not ANTHROPIC_API_KEY}). Usando fallback.")
         return _respuesta_fallback(diagnostico_data)
+
+    print(f"[llm_general] INFO: Iniciando análisis con Claude 3 Opus ({MODEL_NAME}).")
 
     puntajes_sec: List[float] = []
     clasif_sec: List[str] = []

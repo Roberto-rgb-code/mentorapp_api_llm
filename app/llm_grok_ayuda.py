@@ -180,7 +180,7 @@ async def chat_grok_ayuda(message: str) -> str:
         return local
     
     # 2. Intentar OpenAI para respuestas más complejas
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY", "").strip().strip('"').strip("'")
     if api_key:
         try:
             async with httpx.AsyncClient(timeout=12.0) as client:
@@ -191,7 +191,7 @@ async def chat_grok_ayuda(message: str) -> str:
                         "Authorization": f"Bearer {api_key}"
                     },
                     json={
-                        "model": os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"),
+                        "model": os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini").strip().strip('"').strip("'"),
                         "temperature": 0.5,
                         "max_tokens": 200,
                         "messages": [

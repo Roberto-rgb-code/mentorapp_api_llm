@@ -14,8 +14,8 @@ logger = logging.getLogger("diag_profundo")
 # Carga variables de entorno (usa .env)
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip().strip('"').strip("'")
+MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o").strip().strip('"').strip("'")
 DEMO_ON_ERROR = os.getenv("DIAG_DEMO_ON_ERROR", "1") == "1"
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None

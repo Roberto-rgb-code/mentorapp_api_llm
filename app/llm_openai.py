@@ -8,8 +8,8 @@ from fpdf import FPDF
 load_dotenv()
 
 # Inicializa cliente OpenAI
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip().strip('"').strip("'")
+MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o-mini").strip().strip('"').strip("'")
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # ----------- FUNCIÓN: ANALIZAR DIAGNÓSTICO -----------
