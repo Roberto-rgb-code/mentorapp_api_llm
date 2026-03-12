@@ -539,13 +539,15 @@ IMPORTANTE: Tu respuesta final debe ser el JSON de salida directamente, sin deli
         if not isinstance(parsed.get("resumen_ejecutivo", ""), str):
             parsed["resumen_ejecutivo"] = parsed.get("diagnostico_ejecutivo", "No se pudo generar el resumen.")
 
-        def _as_list_str(x):
+        def _ensure_list(x):
             if isinstance(x, list):
-                return [str(i) for i in x][:12]
+                return x[:12]
             return []
 
-        parsed["areas_oportunidad"] = _as_list_str(parsed.get("areas_oportunidad") or parsed.get("oportunidades", []))
-        parsed["recomendaciones_clave"] = _as_list_str(parsed.get("recomendaciones_clave") or parsed.get("prioridades_30_dias", []))
+        parsed["areas_oportunidad"] = _ensure_list(parsed.get("areas_oportunidad") or parsed.get("oportunidades", []))
+        # El plan_30_dias también debe ser una lista de objetos, no de strings
+        parsed["plan_30_dias"] = _ensure_list(parsed.get("plan_30_dias") or [])
+        parsed["recomendaciones_innovadoras"] = _ensure_list(parsed.get("recomendaciones_innovadoras") or [])
         
         # Inserción FORZADA y DETERMINISTA de los cálculos algorítmicos.
         # Quitamos la responsabilidad de esto al LLM y nos fiamos 100% de la matemática (Capa 1/2) local.
