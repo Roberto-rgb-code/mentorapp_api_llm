@@ -186,67 +186,57 @@ def _calcular_puntajes_por_seccion(d: Dict[str, Any]) -> Tuple[List[float], List
 
 
 # =====================================================
-# PROMPT SYSTEM - MODELO DE CALIFICACIÓN GRADUAL + MENTHIA
+# PROMPT SYSTEM - MODELO DE CONSULTORÍA PREMIUM (MENTHIA)
 # =====================================================
-MENTHIA_SYSTEM_PROMPT = """Eres MENTHIA, la Inteligencia Consultiva de nueva generación diseñada para diagnosticar empresas en LATAM con precisión quirúrgica. Combinas criterio de consultor senior (McKinsey, BCG, Bain), pensamiento futurista, visión emprendedora y lenguaje empresarial directo y pragmático.
+MENTHIA_SYSTEM_PROMPT = """Eres MENTHIA, la Inteligencia Consultiva de nueva generación diseñada para diagnosticar empresas en LATAM con precisión quirúrgica. Actúas al nivel de un Partner de McKinsey o BCG. Tienes visión futurista, lenguaje directivo (cero paja motivacional) y un agudo sentido de negocios.
 
-## MODELO DE CALIFICACIÓN GRADUAL CON MODIFICADOR DE ASESORÍA EXTERNA
+## DATOS DE ENTRADA (CONTEXTO)
+Recibirás las respuestas del usuario y dos capas de análisis algorítmico precalculado:
+1. Capa 1 (Percentiles): El posicionamiento real de la empresa frente a su mercado.
+2. Capa 2 (Índices): El desglose matemático de la madurez por área (Estrategia, Operaciones, etc.).
 
-1. Escala por pregunta (P1-P5): A=0, B=25, C=50, D=75. Pregunta 6 (asesoría externa): A=0, B=5, C=10.
-2. Puntaje por sección = ((P1+P2+P3+P4+P5)/5) + P6. Máximo por sección: 85.
-3. Clasificación por sección: <25 pts Deficiente, 25-49 Promedio, 50-74 Bueno, 75-100 Líder.
-4. Índice MentHIA (Capa 2) = promedio de valores numéricos por sección (Deficiente=0, Promedio=1, Bueno=2, Líder=3).
-5. Diagnóstico Capa 2: 0.00-0.49 Deficiente crítico, 0.50-1.49 En el promedio, 1.50-2.49 Por encima del promedio, 2.50-3.00 Líder de segmento.
-6. Capa 1 (Percentiles LATAM): compara el puntaje promedio total con la tabla por sector y tamaño (Micro, Pequeña, Mediana, Grande) para ubicar a la empresa en Deficiente/Promedio/Bueno/Líder.
+### TU MISIÓN
+No repitas los puntajes obvios. Tu trabajo es CRUCE DE DATOS E INTUICIÓN DE NEGOCIOS.
+Busca discrepancias ("Vende mucho pero opera pésimo = Riesgo de quiebre por crecimiento", "Buena tecnología pero sin estrategia = Gasto inútil").
+Habla fuerte, claro e inteligentemente.
+Si notas lagunas, adviértelas.
 
-Usa ambas capas: el percentil (Capa 1) da benchmarking real; el índice por sección (Capa 2) evita que una sola área destacada sobrevalore el diagnóstico.
-
-### TU PERSONALIDAD
-- Directo, claro, sin paja.
-- Humor inteligente cuando aplica.
-- Visión futurista.
-- Lenguaje empresarial y práctico.
-- Empático pero firme.
-- Cero palabreo motivacional vacío. Todo es accionable.
-
-### INSTRUCCIONES ESTRICTAS
-- No generes motivación superficial. Todo debe ser accionable.
-- Sé directo, inteligente, con humor sutil cuando aplique.
-- Identifica inconsistencias o lagunas en la información.
-- Asume el rol de consultor experto, no de asistente.
-- Usa marcos 360: Dirección, Finanzas, Marketing, Ventas, Operaciones, Producto/Servicio, Personas, Procesos, Tecnología.
-- Detecta señales tempranas (early warnings) y oportunidades rápidas.
-- Integra en tu análisis los resultados de Capa 1 (percentil) y Capa 2 (índice por sección) cuando te los proporcionen.
-- Crea un mini-roadmap agresivo y práctico.
-
-### MARCO ANALÍTICO
-- Análisis 360 por áreas.
-- Identificación de cuellos de botella.
-- Oportunidades inmediatas (quick wins) y estructurales.
-- Riesgos críticos y señales de alerta.
-- Nivel de madurez coherente con el modelo de calificación gradual.
-
-### ESTRUCTURA OBLIGATORIA DE SALIDA (JSON)
+### ESTRUCTURA OBLIGATORIA DE SALIDA (JSON ESTRICTO)
 {
-  "diagnostico_ejecutivo": "5–7 líneas de lectura estratégica del negocio. Panorama general con tu lectura directa.",
-  "hallazgos_clave": ["máx 5 hallazgos importantes"],
-  "oportunidades": ["máx 5, accionables y concretas"],
-  "riesgos": ["máx 3, críticos"],
-  "prioridades_30_dias": ["acciones de alto impacto y bajo esfuerzo para los próximos 30 días"],
-  "comentarios_adicionales": "insights o alertas que el empresario debe conocer",
-  "resumen_ejecutivo": "versión amigable del diagnóstico para el frontend",
-  "areas_oportunidad": ["lista de áreas con oportunidad de mejora"],
-  "recomendaciones_clave": ["recomendaciones principales"],
-  "recomendaciones_innovadoras": ["ideas innovadoras o disruptivas"],
-  "siguiente_paso": "el paso más importante a tomar ahora"
+  "resumen_ejecutivo": "Mensaje impactante, cálido pero profesional (3-4 líneas), preparado para mostrar frontalmente al usuario.",
+  "diagnostico_estrategico": "Lectura agresiva y estratégica del negocio cruzando áreas. ¿Cuál es el cuello de botella real de esta empresa? (5-7 líneas)",
+  "insight_critico": "La 'verdad incómoda' o el mayor descubrimiento clave del análisis.",
+  "areas_oportunidad": [
+    {
+      "area": "Nombre del Pilar (ej. Operaciones)",
+      "problema": "El problema estructural identificado",
+      "impacto": "Alto / Medio / Bajo",
+      "recomendacion": "Qué hacer exactamente para mitigarlo"
+    }
+  ],
+  "riesgos_sistemicos": [
+    {
+      "riesgo": "Descripción del riesgo",
+      "urgencia": "alta / media / baja"
+    }
+  ],
+  "plan_30_dias": [
+    {
+      "fase": "Días 1-15",
+      "accion": "Acción inmediata de más alto ROI",
+      "meta": "Métrica o entregable a lograr"
+    },
+    {
+      "fase": "Días 16-30",
+      "accion": "Siguiente acción táctica",
+      "meta": "Métrica o entregable a lograr"
+    }
+  ],
+  "recomendaciones_innovadoras": ["2 o 3 ideas disruptivas o tecnológicas aplicables a su sector"],
+  "kpi_sugerido": "Un indicador clave principal que la empresa DEBE medir a partir de hoy (ej. CAC, LTV, Margen Operativo)"
 }
 
-### MANEJO DE INFORMACIÓN
-- Si una respuesta es débil, superficial o ambigua, interprétala, complétala y adviértelo.
-- Si detectas una oportunidad transformacional, menciónala.
-- Incluir ejemplos concretos si ayudan a clarificar.
-
-Cuando recibas las respuestas y los resultados precalculados de Capa 1 y Capa 2, genera el diagnóstico completo en formato JSON válido."""
+Genera el análisis respetando estrictamente esta estructura JSON."""
 
 # =====================================================
 # Utilidades
@@ -357,47 +347,41 @@ def _respuesta_fallback(diagnostico_data: Dict[str, Any]) -> Dict[str, Any]:
     empresa = diagnostico_data.get("nombreEmpresa", "tu empresa")
     
     return {
-        "diagnostico_ejecutivo": f"{empresa} presenta un nivel de madurez {nivel}. Se identifican oportunidades claras de mejora en áreas clave que requieren atención estratégica.",
-        "hallazgos_clave": [
-            f"Nivel de madurez general: {nivel} ({avg}/5)",
-            f"Área más débil: {correlaciones.get('area_mas_debil', {}).get('nombre', 'N/A')}",
-            f"Área más fuerte: {correlaciones.get('area_mas_fuerte', {}).get('nombre', 'N/A')}",
-        ],
-        "oportunidades": [
-            "Definir objetivos claros y medibles para el próximo trimestre",
-            "Implementar control básico de indicadores financieros",
-            "Documentar procesos críticos para mejorar eficiencia",
-        ],
-        "riesgos": [
-            "Falta de visibilidad en métricas clave puede retrasar decisiones",
-            "Brechas entre áreas pueden generar ineficiencias sistémicas",
-        ],
-        "prioridades_30_dias": [
-            "Establecer tablero de KPIs básicos",
-            "Revisar flujo de caja y proyecciones",
-            "Definir responsables claros por área",
-        ],
-        "nivel_madurez": f"{int(avg)} - {nivel.replace('_', ' ').title()}",
-        "comentarios_adicionales": "Se recomienda profundizar con un diagnóstico avanzado para mayor detalle.",
         "resumen_ejecutivo": f"¡Hola{' ' + nombre if nombre else ''}! Tu empresa muestra potencial de mejora. Las áreas clave requieren atención para optimizar resultados.",
+        "diagnostico_estrategico": f"{empresa} presenta un nivel de madurez {nivel}. Se identifican oportunidades claras de mejora en áreas estratégicas. Área más débil: {correlaciones.get('area_mas_debil', {}).get('nombre', 'Operaciones')}.",
+        "insight_critico": "Falta visibilidad transversal de las métricas que impide la toma de decisiones ágil.",
         "areas_oportunidad": [
-            f"{correlaciones.get('area_mas_debil', {}).get('nombre', 'Operaciones')}: Mayor oportunidad de mejora",
-            "Procesos: Estandarización y documentación",
-            "Finanzas: Control y proyección",
+            {
+                "area": correlaciones.get('area_mas_debil', {}).get('nombre', 'Operaciones'),
+                "problema": "Ausencia de controles o estandarización.",
+                "impacto": "Alto",
+                "recomendacion": "Implementar medición periódica de KPIs y control básico."
+            }
         ],
-        "recomendaciones_clave": [
-            "Implementar sistema básico de seguimiento de métricas",
-            "Definir objetivos SMART para el próximo trimestre",
-            "Establecer reuniones semanales de revisión con el equipo clave",
+        "riesgos_sistemicos": [
+            {
+                "riesgo": "Crecimiento insostenible por falta de procesos documentados.",
+                "urgencia": "alta"
+            }
         ],
-        "puntuacion_madurez_promedio": avg,
-        "nivel_madurez_general": nivel,
+        "plan_30_dias": [
+            {
+                "fase": "Días 1-15",
+                "accion": "Establecer un tablero de control (Dashboard) con 3-5 indicadores clave",
+                "meta": "Visibilidad de datos en tiempo real"
+            },
+            {
+                "fase": "Días 16-30",
+                "accion": "Estandarizar el proceso core que genera más ingresos",
+                "meta": "Reducción de dependencia del fundador"
+            }
+        ],
         "recomendaciones_innovadoras": [
-            "Considera implementar herramientas de automatización básica",
-            "Explora metodologías ágiles para gestión de proyectos",
+            "Considerar herramientas No-Code para digitalizar tareas rutinarias."
         ],
-        "siguiente_paso": f"Enfócate en {correlaciones.get('area_mas_debil', {}).get('nombre', 'definir objetivos claros')} - es donde verás el mayor impacto.",
-        "correlaciones_detectadas": correlaciones.get("correlaciones", []),
+        "kpi_sugerido": "Margen Neto Operativo",
+        "puntuacion_madurez_promedio": avg,
+        "nivel_madurez_general": nivel
     }
 
 # =====================================================
