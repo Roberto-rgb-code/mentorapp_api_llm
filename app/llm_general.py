@@ -203,15 +203,15 @@ Si notas lagunas, adviértelas.
 
 ### ESTRUCTURA OBLIGATORIA DE SALIDA (JSON ESTRICTO)
 {
-  "resumen_ejecutivo": "Mensaje impactante, cálido pero profesional (3-4 líneas), preparado para mostrar frontalmente al usuario.",
-  "diagnostico_estrategico": "Lectura agresiva y estratégica del negocio cruzando áreas. ¿Cuál es el cuello de botella real de esta empresa? (5-7 líneas)",
-  "insight_critico": "La 'verdad incómoda' o el mayor descubrimiento clave del análisis.",
+  "resumen_ejecutivo": "Mensaje impactante, cálido pero profesional (al menos 4-5 líneas), resumiendo el valor del diagnóstico.",
+  "diagnostico_estrategico": "Lectura profunda y estratégica del negocio cruzando áreas. ¿Cuál es el cuello de botella real de esta empresa? Sé muy analítico y profesional (al menos 6-8 líneas bien estructuradas).",
+  "insight_critico": "La 'verdad incómoda' o el mayor descubrimiento clave del análisis. Sé directo.",
   "areas_oportunidad": [
     {
       "area": "Nombre del Pilar (ej. Operaciones)",
-      "problema": "El problema estructural identificado",
+      "problema": "Descripción extensa del problema estructural identificado (al menos 3-4 líneas)",
       "impacto": "Alto / Medio / Bajo",
-      "recomendacion": "Qué hacer exactamente para mitigarlo"
+      "recomendacion": "Plan de acción detallado para mitigarlo (al menos 3-4 líneas)"
     }
   ],
   "riesgos_sistemicos": [
