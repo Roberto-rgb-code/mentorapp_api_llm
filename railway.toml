@@ -1,0 +1,10 @@
+# Railway - mentorapp_api_llm
+# https://docs.railway.app/reference/config-as-code
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "sh start.sh"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10

@@ -1,0 +1,38 @@
+# Ignora entorno virtual
+venv/
+ENV/
+.env
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos de logs
+*.log
+
+# Configuración del entorno local
+*.env
+
+# Archivos de test/coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+coverage.xml
+.cache
+pytest_cache/
+.pytest_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Archivos de exportación o resultados
+*.sqlite3
+*.db
+*.pkl
+*.bak

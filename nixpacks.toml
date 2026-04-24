@@ -1,0 +1,11 @@
+# Nixpacks (Railway build) - Python 3.10
+# https://nixpacks.com/docs/builders/python
+
+[phases.setup]
+nixPkgs = ["python310"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "sh start.sh"
