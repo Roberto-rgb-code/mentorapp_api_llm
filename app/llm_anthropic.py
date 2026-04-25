@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import Any
 
 import anthropic
 
-DEFAULT_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+logger = logging.getLogger(__name__)
+
+_DEFAULT_SONNET = "claude-sonnet-4-20250514"
+
+
+def _resolve_model() -> str:
+    raw = (
+        os.environ.get("ANTHROPIC_MODEL_NAME")
+        or os.environ.get("ANTHROPIC_MODEL")
+        or _DEFAULT_SONNET
+    )
+    return str(raw).strip().strip('"').strip("'")
 
 
 def extract_json_object(text: str) -> dict[str, Any] | None:
@@ -33,19 +45,27 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
 
 
 def call_claude_json(system: str, user: str, max_tokens: int = 6000) -> dict[str, Any] | None:
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")
     if not key:
         return None
-    client = anthropic.Anthropic(api_key=key)
-    msg = client.messages.create(
-        model=DEFAULT_MODEL,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    )
-    parts = []
+    model = _resolve_model()
+    try:
+        client = anthropic.Anthropic(api_key=key)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+    except Exception as e:  # noqa: BLE001 — devolver None y usar fallback en routers
+        logger.warning("Anthropic messages.create falló (%s): %s", model, e)
+        return None
+    parts: list[str] = []
     for b in msg.content:
         if b.type == "text":
             parts.append(b.text)
     raw = "\n".join(parts)
-    return extract_json_object(raw)
+    parsed = extract_json_object(raw)
+    if parsed is None and raw:
+        logger.warning("Anthropic devolvió texto sin JSON parseable (primeros 120 chars): %s", raw[:120])
+    return parsed
