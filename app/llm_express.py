@@ -131,6 +131,8 @@ def calcular_express(data: Dict[str, Any]) -> Dict[str, Any]:
 
     empresa = str(data.get("nombreEmpresa") or data.get("empresa") or "Mi Empresa").strip() or "Mi Empresa"
     sol = str(data.get("nombreSolicitante") or data.get("solicitante") or "").strip()
+    puesto = str(data.get("puesto") or "").strip()
+    antiguedad = str(data.get("antiguedadEmpresa") or data.get("antiguedad_empresa") or "").strip()
     emps = int(data.get("numeroEmpleados") or data.get("empleados") or 1)
     tam = _tamano_empresa(emps)
 
@@ -162,6 +164,18 @@ def calcular_express(data: Dict[str, Any]) -> Dict[str, Any]:
                 "valor_numerico": _valor_numerico(cl),
             }
         )
+
+    # Una sola pregunta MC en Tecnología puede dejar el área en 0; evitamos 0 por interpretabilidad del reporte.
+    for i, d in enumerate(det):
+        if d["nombre"] == "Tecnología" and float(d["calificacion"]) <= 0:
+            cal_f = 12.5
+            cl_f = _clas_area(cal_f)
+            det[i] = {
+                **d,
+                "calificacion": cal_f,
+                "clasificacion": cl_f,
+                "valor_numerico": _valor_numerico(cl_f),
+            }
 
     idx = round(sum(d["calificacion"] for d in det) / len(det), 2)
     pt = PCTL.get(f"{sector}|{tam}") or [36, 50, 70]
@@ -237,6 +251,8 @@ def calcular_express(data: Dict[str, Any]) -> Dict[str, Any]:
         "fecha": fecha,
         "textos_abiertos": textos,
         "respuestas_mc": {qid: _mc_index(resp[qid]) for qid, _ in QUESTION_MC},
+        "puesto": puesto,
+        "antiguedad_empresa": antiguedad,
     }
 
 
@@ -255,7 +271,7 @@ Responde SOLO JSON:
   {"titulo":"Acción 3","descripcion":"...","prioridad":"...","quick_win":"..."}
 ],
 "recomendaciones_por_area":[
-  {"area":"Estrategia","calificacion":NUM,"diagnostico":"1-2 líneas","prioridad":"..."},
+  {"area":"Estrategia","calificacion":NUM,"diagnostico":"1-2 líneas de interpretación","recomendacion":"1-2 líneas de acción concreta (NO copiar el diagnóstico)","prioridad":"..."},
   {"area":"Finanzas",...},
   {"area":"Marketing y Ventas",...},
   {"area":"Operaciones",...},
@@ -279,9 +295,13 @@ def _build_user_context(calc: Dict[str, Any], resp: Dict[str, Any]) -> str:
     fecha = calc["fecha"]
     textos = calc["textos_abiertos"]
 
+    extra_demo = ""
+    if calc.get("puesto") or calc.get("antiguedad_empresa"):
+        extra_demo = f"PUESTO: {calc.get('puesto') or '—'}\nANTIGÜEDAD EMPRESA: {calc.get('antiguedad_empresa') or '—'}\n"
+
     ctx = f"""EMPRESA: {empresa}
 SOLICITANTE: {sol}
-SECTOR: {sector} | TAMAÑO: {tam} ({emps} empleados)
+{extra_demo}SECTOR: {sector} | TAMAÑO: {tam} ({emps} empleados)
 FECHA: {fecha}
 
 === RESULTADOS PRECALCULADOS (escala 0-100) ===
@@ -351,6 +371,10 @@ def _fallback_ai(calc: Dict[str, Any]) -> Dict[str, Any]:
                 "area": d["nombre"],
                 "calificacion": d["calificacion"],
                 "diagnostico": f"Nivel {d['clasificacion']}: ajustar prácticas y controles en {d['nombre']}.",
+                "recomendacion": (
+                    f"Define 1-2 acciones medibles en {d['nombre']} con responsable y fecha de revisión en 30 días; "
+                    "prioriza el indicador más sensible del área."
+                ),
                 "prioridad": "Crítica"
                 if d["calificacion"] < 25
                 else ("Alta" if d["calificacion"] < 50 else "Media"),
@@ -411,6 +435,20 @@ async def analizar_diagnostico_express(data: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(acc, list) and len(acc) > 4:
         parsed["acciones_prioritarias"] = acc[:4]
 
+    recos = parsed.get("recomendaciones_por_area") or []
+    if isinstance(recos, list):
+        for r in recos:
+            if not isinstance(r, dict):
+                continue
+            diag = str(r.get("diagnostico") or "").strip()
+            rec = str(r.get("recomendacion") or "").strip()
+            area = str(r.get("area") or "esta área")
+            if not rec or rec == diag:
+                r["recomendacion"] = (
+                    f"Acción sugerida: prioriza en {area} una mejora concreta con meta numérica y revisión en 30 días "
+                    "(dueño único y evidencia mínima de avance)."
+                )
+
     out = dict(calc)
     out.update(
         {
@@ -418,7 +456,7 @@ async def analizar_diagnostico_express(data: Dict[str, Any]) -> Dict[str, Any]:
             "resumen_ejecutivo": parsed.get("resumen_ejecutivo", ""),
             "insight_critico": parsed.get("insight_critico", ""),
             "acciones_prioritarias": parsed.get("acciones_prioritarias", []),
-            "recomendaciones_por_area": parsed.get("recomendaciones_por_area", []),
+            "recomendaciones_por_area": recos,
             "kpi_sugerido": parsed.get("kpi_sugerido", ""),
             "siguiente_paso": parsed.get("siguiente_paso", ""),
             "llm_mode": "anthropic",
