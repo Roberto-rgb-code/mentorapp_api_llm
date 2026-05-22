@@ -69,3 +69,25 @@ def call_claude_json(system: str, user: str, max_tokens: int = 6000) -> dict[str
     if parsed is None and raw:
         logger.warning("Anthropic devolvió texto sin JSON parseable (primeros 120 chars): %s", raw[:120])
     return parsed
+
+def call_claude_text(system: str, messages: list[dict[str, str]], max_tokens: int = 1000) -> str | None:
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")
+    if not key:
+        return None
+    model = _resolve_model()
+    try:
+        client = anthropic.Anthropic(api_key=key)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=messages,
+        )
+    except Exception as e:
+        logger.warning("Anthropic text messages.create falló (%s): %s", model, e)
+        return None
+    parts: list[str] = []
+    for b in msg.content:
+        if b.type == "text":
+            parts.append(b.text)
+    return "\n".join(parts)

@@ -76,3 +76,8 @@ async def finanzas_interpretar(body: dict = Body(...)) -> dict[str, Any]:
     if payload is None or not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="payload (objeto) es requerido")
     return await interpretar_finanzas_narrativa(payload)
+
+@app.post("/api/chatbot/chat")
+async def chatbot_chat(data: dict = Body(...)) -> dict[str, Any]:
+    from app.llm_chatbot import handle_chatbot
+    return await handle_chatbot(data)
