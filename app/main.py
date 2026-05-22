@@ -65,6 +65,10 @@ async def diagnostico_emergencia_analyze(data: dict = Body(...)) -> dict[str, An
 async def diagnostico_profundo_analyze(data: dict = Body(...)) -> dict[str, Any]:
     return await analizar_diagnostico_profundo(data)
 
+@app.post("/api/diagnostico/financia/analyze")
+async def diagnostico_financia_analyze(data: dict = Body(...)) -> dict[str, Any]:
+    from app.llm_financia import analizar_diagnostico_financia
+    return await analizar_diagnostico_financia(data)
 
 @app.post("/api/finanzas/interpretar")
 async def finanzas_interpretar(body: dict = Body(...)) -> dict[str, Any]:
