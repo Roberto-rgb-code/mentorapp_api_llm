@@ -81,3 +81,9 @@ async def finanzas_interpretar(body: dict = Body(...)) -> dict[str, Any]:
 async def chatbot_chat(data: dict = Body(...)) -> dict[str, Any]:
     from app.llm_chatbot import handle_chatbot
     return await handle_chatbot(data)
+
+
+@app.post("/api/diagnostico/agente-financia/chat")
+async def agente_financia_chat_endpoint(data: dict = Body(...)) -> dict[str, Any]:
+    from app.llm_agente_financia import agente_financia_chat
+    return await agente_financia_chat(data)
