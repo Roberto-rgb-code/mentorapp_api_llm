@@ -115,7 +115,8 @@ async def agente_financia_chat(data: dict) -> dict[str, Any]:
         return {
             "reply": (
                 "⚠️ No pude conectarme con el motor de análisis en este momento. "
-                "Verifica que ANTHROPIC_API_KEY esté configurada e inténtalo de nuevo."
+                "Revisa que el modelo Anthropic (ANTHROPIC_MODEL_NAME) sea válido, "
+                "por ejemplo claude-sonnet-4-5, e inténtalo de nuevo."
             ),
             "ok": False,
             "error": "anthropic_unavailable",
