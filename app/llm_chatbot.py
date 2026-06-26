@@ -17,13 +17,13 @@ SERVICIOS DISPONIBLES EN LA PLATAFORMA (todos accesibles desde el Dashboard):
 
 1. DIAGNÓSTICOS EMPRESARIALES (sección "Diagnóstico" en el menú):
    - Diagnóstico General: evaluación integral de la empresa en todas sus áreas (ventas, operaciones, finanzas, marketing, RRHH, liderazgo). Genera un índice MentHIA de 0 a 100.
-   - Diagnóstico Express: versión rápida del diagnóstico general, ideal para obtener un panorama inicial en pocos minutos.
+   - MENTHIA 360: versión rápida del diagnóstico general, ideal para obtener un panorama inicial en pocos minutos.
    - Diagnóstico Profundo: análisis detallado y extenso con preguntas especializadas por área funcional.
    - Diagnóstico de Emergencia: para situaciones críticas o urgentes (caída de ventas, problemas de flujo, pérdida de clientes). Prioriza acciones inmediatas.
    - Diagnóstico de Competencia / Participación de Mercado: análisis comparativo frente a competidores.
    - Agente F.I.N.A.N.C.I.A.™: diagnóstico financiero especializado que evalúa la bancabilidad de una PyME. Genera un semáforo (rojo/amarillo/verde), un score de bancabilidad, análisis por pilares financieros y un plan de acción 30-60-90 días.
-   - R.E.C.U.P.E.R.A. Profesional: programa estructurado de recuperación empresarial para empresas en crisis.
-   - R.E.C.U.P.E.R.A. Express: versión rápida del programa de recuperación.
+   - F.I.N.A.N.C.I.A. PRO: programa estructurado de recuperación empresarial para empresas en crisis.
+   - F.I.N.A.N.C.I.A. EXPRESS: versión rápida del programa de recuperación.
 
 2. MARKETPLACE:
    - Directorio de consultores y mentores especializados.
@@ -48,11 +48,11 @@ SERVICIOS DISPONIBLES EN LA PLATAFORMA (todos accesibles desde el Dashboard):
 
 REGLAS:
 - Cuando el usuario pregunte qué puede hacer, menciona los servicios más relevantes según su necesidad.
-- Si no sabes qué recomendar, sugiere empezar con un Diagnóstico Express para tener un panorama rápido.
+- Si no sabes qué recomendar, sugiere empezar con MENTHIA 360 para tener un panorama rápido.
 - Para problemas financieros o bancarios, recomienda el Agente F.I.N.A.N.C.I.A.
 - Para crisis o urgencias, recomienda el Diagnóstico de Emergencia.
 - Para compararse con competidores, recomienda el Diagnóstico de Competencia.
-- Para empresas en problemas graves, recomienda R.E.C.U.P.E.R.A.
+- Para empresas en problemas graves, recomienda F.I.N.A.N.C.I.A. PRO o F.I.N.A.N.C.I.A. EXPRESS.
 - Si preguntan por pagos o información comercial: responde que esa información la encuentran en la sección de FAQs o contactando al equipo.
 - Si preguntan por capacitación o cursos: menciona que está "próximamente".
 - No uses emojis.
@@ -62,11 +62,11 @@ REGLAS:
 def get_fallback_response(message: str) -> str:
     msg = message.lower()
     if 'diagnóstico' in msg or 'diagnostico' in msg:
-        return "Tenemos varios diagnósticos: General, Express (rápido), Profundo (detallado), de Emergencia (crisis), de Competencia, F.I.N.A.N.C.I.A. (bancabilidad) y R.E.C.U.P.E.R.A. (recuperación). ¿Cuál necesitas o quieres que te recomiende uno?"
+        return "Tenemos varios diagnósticos: General, MENTHIA 360 (rápido), Profundo (detallado), de Emergencia (crisis), de Competencia, Agente F.I.N.A.N.C.I.A. (bancabilidad), F.I.N.A.N.C.I.A. PRO y F.I.N.A.N.C.I.A. EXPRESS. ¿Cuál necesitas o quieres que te recomiende uno?"
     if 'financia' in msg or 'bancab' in msg or 'banco' in msg or 'crédito' in msg or 'credito' in msg:
         return "El Agente F.I.N.A.N.C.I.A. evalúa la bancabilidad de tu PyME y te da un semáforo (rojo/amarillo/verde) con un plan de acción. Lo encuentras en Diagnóstico > Agente F.I.N.A.N.C.I.A."
     if 'recupera' in msg or 'crisis' in msg or 'quiebra' in msg:
-        return "El programa R.E.C.U.P.E.R.A. está diseñado para empresas en crisis. Tenemos versión Profesional (estructurada) y Express (rápida). Los encuentras en la sección de Diagnóstico."
+        return "F.I.N.A.N.C.I.A. PRO y F.I.N.A.N.C.I.A. EXPRESS están diseñados para empresas en crisis. PRO es la versión estructurada y EXPRESS la rápida. Los encuentras en la sección de Diagnóstico."
     if 'emergencia' in msg or 'urgente' in msg or 'urgencia' in msg:
         return "Para situaciones urgentes tenemos el Diagnóstico de Emergencia que prioriza las acciones inmediatas. Ve a Diagnóstico > Emergencia desde tu dashboard."
     if 'competencia' in msg or 'competidor' in msg or 'mercado' in msg:
@@ -88,11 +88,11 @@ def get_fallback_response(message: str) -> str:
     if 'gracias' in msg or 'thank' in msg:
         return "De nada. ¿Hay algo más en lo que pueda orientarte?"
     if 'ayuda' in msg or 'help' in msg:
-        return "Puedo orientarte sobre: diagnósticos (General, Express, Profundo, Emergencia, Competencia, F.I.N.A.N.C.I.A., R.E.C.U.P.E.R.A.), mentorías 1:1, análisis financiero y más. ¿Qué necesitas?"
+        return "Puedo orientarte sobre: diagnósticos (General, MENTHIA 360, Profundo, Emergencia, Competencia, Agente F.I.N.A.N.C.I.A., F.I.N.A.N.C.I.A. PRO, F.I.N.A.N.C.I.A. EXPRESS), mentorías 1:1, análisis financiero y más. ¿Qué necesitas?"
     if 'express' in msg:
-        return "El Diagnóstico Express es la forma más rápida de obtener un panorama de tu empresa. En pocos minutos obtienes recomendaciones accionables. Ve a Diagnóstico > Express."
+        return "MENTHIA 360 es la forma más rápida de obtener un panorama de tu empresa. En pocos minutos obtienes recomendaciones accionables. Ve a Diagnóstico > MENTHIA 360."
     if 'profundo' in msg:
-        return "El Diagnóstico Profundo es un análisis extenso por área funcional. Ideal si ya hiciste el Express y quieres mayor detalle. Ve a Diagnóstico > Profundo."
+        return "El Diagnóstico Profundo es un análisis extenso por área funcional. Ideal si ya hiciste MENTHIA 360 y quieres mayor detalle. Ve a Diagnóstico > Profundo."
     if 'cupón' in msg or 'cupon' in msg or 'descuento' in msg:
         return "Puedes gestionar tus cupones de descuento en la sección Cupones del dashboard."
     if 'historial' in msg:

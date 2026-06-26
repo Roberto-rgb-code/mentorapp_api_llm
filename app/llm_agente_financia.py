@@ -45,6 +45,12 @@ PASO 7: Cierra con plan de acción 30/60/90 días y CTA para agendar con mentor 
 IMPORTANTE: En cada paso, haz MÁXIMO 2-3 preguntas a la vez. No bombardees al usuario. Avanza al siguiente paso cuando tengas suficiente información del paso actual.
 
 CUANDO ENTREGUES EL DIAGNÓSTICO FINAL (Paso 6):
+Antes del bloque JSON, escribe en lenguaje natural un resumen de 4-6 párrafos cortos donde:
+- Cites al menos 3 datos concretos que el usuario compartió (cifras, SAT, deuda, sector, etc.)
+- Expliques el semáforo con razones específicas, no frases genéricas
+- Menciones el pilar F.I.N.A.N.C.I.A.™ más débil y el más fuerte con acciones distintas
+- PROHIBIDO usar plantillas como "ajustar prácticas", "define 1-2 acciones medibles" o "prioriza el indicador más sensible" en todas las áreas
+
 Incluye en tu respuesta un bloque JSON especial entre marcadores >>>DIAGNOSIS_DATA_START<<< y >>>DIAGNOSIS_DATA_END<<< con este formato exacto:
 {
   "score_global": [número 0-100],
@@ -53,8 +59,12 @@ Incluye en tu respuesta un bloque JSON especial entre marcadores >>>DIAGNOSIS_DA
     "F": [0-100], "I": [0-100], "N": [0-100], "A": [0-100],
     "N2": [0-100], "C": [0-100], "I2": [0-100], "A2": [0-100]
   },
-  "titulo": "[frase contundente personalizada]",
-  "hallazgos": ["hallazgo 1", "hallazgo 2", "hallazgo 3"],
+  "titulo": "[frase contundente personalizada con nombre de empresa o dato clave]",
+  "hallazgos": [
+    "hallazgo 1 con dato del usuario (ej. ingresos, SAT, mezcla de cuentas)",
+    "hallazgo 2 distinto al 1, sobre otro pilar o ratio",
+    "hallazgo 3 con plazo o consecuencia concreta si no se actúa"
+  ],
   "tiempo_bancabilidad": "[ej: 3-4 meses con plan]",
   "etapa_recomendada": "[ej: 02 - Orden Financiero y Control Interno]"
 }

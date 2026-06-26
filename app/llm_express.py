@@ -10,6 +10,8 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 from fastapi import HTTPException
 
+from app.area_interpretations import enrich_recomendaciones_por_area
+
 load_dotenv()
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")
@@ -271,7 +273,7 @@ Responde SOLO JSON:
   {"titulo":"Acción 3","descripcion":"...","prioridad":"...","quick_win":"..."}
 ],
 "recomendaciones_por_area":[
-  {"area":"Estrategia","calificacion":NUM,"diagnostico":"1-2 líneas de interpretación","recomendacion":"1-2 líneas de acción concreta (NO copiar el diagnóstico)","prioridad":"..."},
+  {"area":"Estrategia","calificacion":NUM,"diagnostico":"2-3 líneas ÚNICAS: qué significa el score EN ESTA empresa, citando datos o textos del CEO","recomendacion":"Acción concreta distinta al diagnóstico: qué hacer, quién, plazo 14-30 días, métrica","prioridad":"..."},
   {"area":"Finanzas",...},
   {"area":"Marketing y Ventas",...},
   {"area":"Operaciones",...},
@@ -283,7 +285,19 @@ Responde SOLO JSON:
 "siguiente_paso":"Una frase con el paso #1 que debe dar el CEO esta semana"
 }
 
-Las acciones_prioritarias deben ser 3, máximo 4. NO incluyas plan de 30 días detallado (esto es express). Sé directo, cero paja motivacional. Personaliza usando el nombre de la empresa y los textos del CEO."""
+PROHIBIDO (respuesta inválida si aparece):
+- Plantillas del tipo "ajustar prácticas y controles en [área]"
+- "Define 1-2 acciones medibles..." repetido en todas las áreas
+- Copiar el mismo diagnóstico en recomendación
+- Frases genéricas que podrían aplicar a cualquier empresa sin mencionar sector, tamaño o textos del CEO
+
+OBLIGATORIO:
+- Cada área debe tener diagnóstico y recomendación DIFERENTES entre sí
+- Menciona al menos 2 veces en todo el JSON datos concretos de los textos abiertos del CEO (reto, fortaleza, visión)
+- En el área más débil, conecta explícitamente con qt1 (reto principal)
+- Usa el nombre de la empresa al menos 3 veces
+
+Las acciones_prioritarias deben ser 3, máximo 4. NO incluyas plan de 30 días detallado (esto es express). Sé directo, cero paja motivacional."""
 
 
 def _build_user_context(calc: Dict[str, Any], resp: Dict[str, Any]) -> str:
@@ -321,12 +335,12 @@ CALIFICACIONES POR ÁREA:
     ctx += f"ÁREA MÁS FUERTE: {fue['nombre']} ({fue['calificacion']})\n"
 
     ctx += f"""
-=== CONTEXTO CUALITATIVO DEL CEO (CRÍTICO) ===
-PRINCIPAL RETO ACTUAL: "{textos.get('qt1', '')}"
-MAYOR FORTALEZA: "{textos.get('qt2', '')}"
-VISIÓN A 12 MESES: "{textos.get('qt3', '')}"
+=== CONTEXTO CUALITATIVO DEL CEO (OBLIGATORIO USAR EN CADA ÁREA RELEVANTE) ===
+PRINCIPAL RETO ACTUAL (qt1): "{textos.get('qt1', '')}"
+MAYOR FORTALEZA (qt2): "{textos.get('qt2', '')}"
+VISIÓN A 12 MESES (qt3): "{textos.get('qt3', '')}"
 
-=== RESPUESTAS CRUDAS ===
+=== RESPUESTAS CERRADAS (interpreta el significado, no solo la letra) ===
 """
     n = 0
     for qid, area in QUESTION_MC:
@@ -338,51 +352,64 @@ VISIÓN A 12 MESES: "{textos.get('qt3', '')}"
     return ctx
 
 
+def _ceo_from_calc(calc: Dict[str, Any]) -> Dict[str, str]:
+    t = calc.get("textos_abiertos") or {}
+    return {"reto": t.get("qt1", ""), "fortaleza": t.get("qt2", ""), "vision": t.get("qt3", "")}
+
+
 def _fallback_ai(calc: Dict[str, Any]) -> Dict[str, Any]:
     emp = calc["empresa"]
+    ceo = _ceo_from_calc(calc)
+    deb = min(calc["detalle_secciones"], key=lambda x: x["calificacion"])
+    reto_raw = ceo.get("reto") or ""
+    reto_clause = ""
+    if reto_raw:
+        reto_snip = reto_raw[:80] + ("…" if len(reto_raw) > 80 else "")
+        reto_clause = f" El reto que mencionaste («{reto_snip}») refuerza que {deb['nombre']} debe ser prioridad."
+
+    recs = enrich_recomendaciones_por_area(calc["detalle_secciones"], [], ceo)
+
     return {
-        "recomendacion_general": f"{emp} muestra un índice express de {calc['indice_menthia_0_100']}/100. "
-        "Prioriza cerrar brechas en el área más débil y valida supuestos con datos operativos y financieros simples.",
-        "resumen_ejecutivo": f"Madurez {calc['nivel_madurez']}. Percentil LATAM: {calc['capa1_percentil']}. "
-        f"Índice global {calc['capa2_indice']}/3 — {calc['capa2_diagnostico']}.",
-        "insight_critico": "Sin medición clara, cada decisión es apuesta; la empresa paga costo de oportunidad diario.",
+        "recomendacion_general": (
+            f"{emp} obtuvo {calc['indice_menthia_0_100']}/100 en el índice express ({calc['sector']}, {calc['tamano']}). "
+            f"La brecha más sensible está en {deb['nombre']} ({deb['calificacion']}/100).{reto_clause} "
+            "El siguiente paso no es 'hacer de todo', sino un sprint de 14 días en esa área con una métrica visible."
+        ),
+        "resumen_ejecutivo": (
+            f"{emp}: madurez {calc['nivel_madurez']}, percentil LATAM {calc['capa1_percentil']}, "
+            f"índice global {calc['capa2_indice']}/3 ({calc['capa2_diagnostico']}). "
+            f"Fortaleza relativa: {max(calc['detalle_secciones'], key=lambda x: x['calificacion'])['nombre']}."
+        ),
+        "insight_critico": (
+            f"Con {deb['calificacion']}/100 en {deb['nombre']}, cada meta de crecimiento sin arreglar esa base "
+            "multiplica el desgaste del equipo y la incertidumbre de caja."
+        ),
         "acciones_prioritarias": [
             {
-                "titulo": "Tablero mínimo de KPIs",
-                "descripcion": "Define 5 métricas semanales (ventas, margen, cobranza, caja, NPS interno) y revisión fija de 30 min.",
-                "prioridad": "Alta",
-                "quick_win": "En 7 días: plantilla en hoja de cálculo + responsables.",
-            },
-            {
-                "titulo": "Sprint en área más débil",
-                "descripcion": "14 días enfocados solo en la brecha principal con entregable tangible (proceso, checklist o política).",
-                "prioridad": "Crítica",
-                "quick_win": "Día 1: diagnóstico express de causa raíz en 90 minutos con equipo clave.",
-            },
-            {
-                "titulo": "Reunión de alineación estratégica",
-                "descripcion": "Traduce la visión a 3 prioridades trimestrales y asigna dueños únicos.",
-                "prioridad": "Media",
-                "quick_win": "Esta semana: sesión 2h con decisión de cierre.",
-            },
-        ],
-        "recomendaciones_por_area": [
-            {
-                "area": d["nombre"],
-                "calificacion": d["calificacion"],
-                "diagnostico": f"Nivel {d['clasificacion']}: ajustar prácticas y controles en {d['nombre']}.",
-                "recomendacion": (
-                    f"Define 1-2 acciones medibles en {d['nombre']} con responsable y fecha de revisión en 30 días; "
-                    "prioriza el indicador más sensible del área."
+                "titulo": f"Sprint 14 días en {deb['nombre']}",
+                "descripcion": (
+                    f"Un solo entregable tangible en {deb['nombre']} (proceso, política o tablero) "
+                    "con dueño único y revisión semanal."
                 ),
-                "prioridad": "Crítica"
-                if d["calificacion"] < 25
-                else ("Alta" if d["calificacion"] < 50 else "Media"),
-            }
-            for d in calc["detalle_secciones"]
+                "prioridad": "Crítica",
+                "quick_win": "Día 1: sesión 90 min de causa raíz con quien opera el día a día.",
+            },
+            {
+                "titulo": "Tablero mínimo de KPIs",
+                "descripcion": "5 métricas semanales: ventas, margen, cobranza, caja a 6 semanas, cumplimiento operativo.",
+                "prioridad": "Alta",
+                "quick_win": "En 7 días: plantilla compartida + responsables por métrica.",
+            },
+            {
+                "titulo": "Alineación con visión 12 meses",
+                "descripcion": "Traduce la visión del CEO en 3 prioridades trimestrales con fecha y evidencia de avance.",
+                "prioridad": "Media",
+                "quick_win": "Esta semana: reunión 2h con decisiones cerradas, no solo ideas.",
+            },
         ],
-        "kpi_sugerido": "Margen bruto por línea de producto/servicio + días de cobranza (DSO).",
-        "siguiente_paso": "Esta semana: instala el tablero mínimo y la primera revisión con números reales.",
+        "recomendaciones_por_area": recs,
+        "kpi_sugerido": "Margen bruto por línea + días de cobranza (DSO) + saldo de caja proyectado a 6 semanas.",
+        "siguiente_paso": f"Esta semana: arrancar el sprint en {deb['nombre']} y la primera revisión con números reales.",
     }
 
 
@@ -435,19 +462,11 @@ async def analizar_diagnostico_express(data: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(acc, list) and len(acc) > 4:
         parsed["acciones_prioritarias"] = acc[:4]
 
-    recos = parsed.get("recomendaciones_por_area") or []
-    if isinstance(recos, list):
-        for r in recos:
-            if not isinstance(r, dict):
-                continue
-            diag = str(r.get("diagnostico") or "").strip()
-            rec = str(r.get("recomendacion") or "").strip()
-            area = str(r.get("area") or "esta área")
-            if not rec or rec == diag:
-                r["recomendacion"] = (
-                    f"Acción sugerida: prioriza en {area} una mejora concreta con meta numérica y revisión en 30 días "
-                    "(dueño único y evidencia mínima de avance)."
-                )
+    recos = enrich_recomendaciones_por_area(
+        calc["detalle_secciones"],
+        parsed.get("recomendaciones_por_area") if isinstance(parsed.get("recomendaciones_por_area"), list) else [],
+        _ceo_from_calc(calc),
+    )
 
     out = dict(calc)
     out.update(
