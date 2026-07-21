@@ -34,13 +34,15 @@ I - Inteligencia de Crecimiento: proyecciones realistas, pipeline, uso planeado 
 A - Acceso a Capital: match entre perfil y productos financieros viables (banca, factoraje, NAFIN, FIRA, BANCOMEXT)
 
 FLUJO DE DIAGNÓSTICO INICIAL (modo_diagnostico_inicial) — SIGUE ESTOS PASOS EN ORDEN:
-PASO 1: Bienvenida. Preséntate brevemente. Pregunta el nombre del usuario y su objetivo principal (opciones: Conseguir financiamiento / Ordenar finanzas / Crecer-escalar / Vender la empresa / Rescatar empresa en crisis / Diagnóstico general).
-PASO 2: Datos básicos de la empresa (nombre comercial, sector, estado/ciudad, antigüedad en años, número de empleados, régimen fiscal).
+PASO 1: Bienvenida. Preséntate brevemente. Pregunta el objetivo principal (opciones: Conseguir financiamiento / Ordenar finanzas / Crecer-escalar / Vender la empresa / Rescatar empresa en crisis / Diagnóstico general). Si ya tienes el nombre en CONTEXTO DE REGISTRO, NO lo vuelvas a pedir.
+PASO 2: Datos básicos de la empresa faltantes (solo pregunta lo que NO esté en CONTEXTO DE REGISTRO: nombre comercial, sector, estado/ciudad, antigüedad en años, número de empleados, régimen fiscal).
 PASO 3: Datos financieros. Pide ingresos anuales aproximados (últimos 12 meses), costo de ventas, utilidad/ganancia estimada, deuda bancaria total, activos totales y capital. Si el usuario no tiene cifras exactas, trabaja con estimaciones.
 PASO 4: Datos operativos vía checklist conversacional (¿separa finanzas personales del negocio?, ¿tiene contabilidad al corriente?, ¿usa sistema contable formal?, ¿tiene presupuesto anual?, ¿mide sus KPIs?).
 PASO 5: Historial crediticio y fiscal (¿tiene créditos vigentes y en qué estatus?, ¿opinión de cumplimiento SAT positiva o negativa?, ¿ha sido rechazado por bancos recientemente?).
 PASO 6: PROCESA EL DIAGNÓSTICO COMPLETO. Con toda la información recopilada, calcula scores por cada pilar, el score global, el semáforo de bancabilidad, ratios clave (si tienes datos financieros) y entrega un diagnóstico completo.
 PASO 7: Cierra con plan de acción 30/60/90 días y CTA para agendar con mentor humano.
+
+Si recibes un bloque "CONTEXTO DE REGISTRO DEL USUARIO", trata esos campos como confirmados. Úsalos en el diagnóstico. NO vuelvas a preguntar nombre, nombre comercial, sector ni ciudad si ya vienen ahí.
 
 IMPORTANTE: En cada paso, haz MÁXIMO 2-3 preguntas a la vez. No bombardees al usuario. Avanza al siguiente paso cuando tengas suficiente información del paso actual.
 
@@ -79,7 +81,7 @@ REGLAS INVIOLABLES (guardrails):
 
 PROTOCOLO DATOS FALTANTES: Cuando falta un dato crítico, NO inventes. Ofrece 3 opciones: (a) capturarlo ahora, (b) trabajar con estimación, (c) continuar diagnóstico parcial marcado como tal.
 
-Al inicio, cuando el usuario te saluda, inicia el PASO 1 inmediatamente con una bienvenida cálida y directa."""
+Al inicio, cuando el usuario te saluda, inicia el PASO 1 inmediatamente con una bienvenida cálida y directa. Si ya conoces su nombre por el contexto de registro, salúdalo por su nombre y pregunta solo el objetivo."""
 
 
 _VALID_ROLES = {"user", "assistant"}
@@ -109,9 +111,65 @@ def _sanitize_messages(raw: Any) -> list[dict[str, str]]:
     return clean
 
 
+def _sanitize_profile_context(raw: Any) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    mapping = {
+        "fullName": ("fullName", "name", "displayName"),
+        "businessName": ("businessName", "companyName", "empresa"),
+        "companySector": ("companySector", "sector", "industry", "giro"),
+        "city": ("city",),
+        "country": ("country",),
+        "companySize": ("companySize",),
+        "businessStage": ("businessStage",),
+    }
+    out: dict[str, str] = {}
+    for target, keys in mapping.items():
+        for key in keys:
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                out[target] = value.strip()
+                break
+    return out
+
+
+def _format_profile_context(profile: dict[str, str]) -> str:
+    labels = {
+        "fullName": "Nombre",
+        "businessName": "Nombre comercial / empresa",
+        "companySector": "Sector / giro",
+        "city": "Ciudad",
+        "country": "País",
+        "companySize": "Tamaño de empresa",
+        "businessStage": "Etapa del negocio",
+    }
+    lines = [f"- {labels[key]}: {value}" for key, value in profile.items() if key in labels]
+    if not lines:
+        return ""
+    return (
+        "CONTEXTO DE REGISTRO DEL USUARIO (ya confirmado; NO volver a preguntar estos campos):\n"
+        + "\n".join(lines)
+    )
+
+
+def _build_system_prompt(profile: dict[str, str]) -> str:
+    block = _format_profile_context(profile)
+    return f"{SYSTEM_PROMPT}\n\n{block}" if block else SYSTEM_PROMPT
+
+
 async def agente_financia_chat(data: dict) -> dict[str, Any]:
     messages = _sanitize_messages(data.get("messages"))
+    profile = _sanitize_profile_context(data.get("profileContext"))
     if not messages:
+        name = profile.get("fullName")
+        if name:
+            return {
+                "reply": (
+                    f"¡Hola, **{name}**! Para comenzar el diagnóstico, cuéntame: "
+                    "**¿cuál es tu objetivo principal hoy?**"
+                ),
+                "ok": True,
+            }
         return {
             "reply": (
                 "Para comenzar el diagnóstico, cuéntame: **¿cómo te llamas y cuál es "
@@ -120,7 +178,7 @@ async def agente_financia_chat(data: dict) -> dict[str, Any]:
             "ok": True,
         }
 
-    reply = call_claude_text(SYSTEM_PROMPT, messages, max_tokens=2500)
+    reply = call_claude_text(_build_system_prompt(profile), messages, max_tokens=2500)
     if not reply:
         return {
             "reply": (
