@@ -152,14 +152,19 @@ def _format_profile_context(profile: dict[str, str]) -> str:
     )
 
 
-def _build_system_prompt(profile: dict[str, str]) -> str:
+def _build_system_prompt(profile: dict[str, str], nlp_prompt_block: str = "") -> str:
     block = _format_profile_context(profile)
-    return f"{SYSTEM_PROMPT}\n\n{block}" if block else SYSTEM_PROMPT
+    system = f"{SYSTEM_PROMPT}\n\n{block}" if block else SYSTEM_PROMPT
+    nlp = (nlp_prompt_block or "").strip()
+    if nlp:
+        system = f"{system}\n\n{nlp}"
+    return system
 
 
 async def agente_financia_chat(data: dict) -> dict[str, Any]:
     messages = _sanitize_messages(data.get("messages"))
     profile = _sanitize_profile_context(data.get("profileContext"))
+    nlp_block = str(data.get("nlp_prompt_block") or "").strip()
     if not messages:
         name = profile.get("fullName")
         if name:
@@ -178,7 +183,7 @@ async def agente_financia_chat(data: dict) -> dict[str, Any]:
             "ok": True,
         }
 
-    reply = call_claude_text(_build_system_prompt(profile), messages, max_tokens=2500)
+    reply = call_claude_text(_build_system_prompt(profile, nlp_block), messages, max_tokens=2500)
     if not reply:
         return {
             "reply": (

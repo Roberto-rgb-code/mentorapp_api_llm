@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -22,6 +22,8 @@ class ProfesionalBody(BaseModel):
     nombreSolicitante: str = ""
     correoElectronico: str = ""
     inputs: dict[str, Any] = Field(default_factory=dict)
+    nlp_signals: Optional[dict[str, Any]] = None
+    nlp_prompt_block: Optional[str] = None
 
 
 SYSTEM = """Eres consultor senior en rescate financiero de PyMEs en México (comercio y distribución).
@@ -159,9 +161,13 @@ def analyze_recupera_profesional(body: ProfesionalBody) -> dict[str, Any]:
             "sector": body.sector,
             "empleados": body.numeroEmpleados,
             "metricas": metrics,
+            "nlp_signals": body.nlp_signals,
         },
         ensure_ascii=False,
     )
+    nlp_block = (body.nlp_prompt_block or "").strip()
+    if nlp_block:
+        user = f"{user}\n\n{nlp_block}"
 
     llm = call_claude_json(SYSTEM, user)
     if not llm or not (llm.get("resumen_ejecutivo") or llm.get("recomendacion_general")):

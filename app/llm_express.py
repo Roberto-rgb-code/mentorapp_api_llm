@@ -352,6 +352,13 @@ VISIÓN A 12 MESES (qt3): "{textos.get('qt3', '')}"
     return ctx
 
 
+def _append_nlp_block(ctx: str, data: Dict[str, Any]) -> str:
+    block = (data.get("nlp_prompt_block") or "").strip()
+    if not block:
+        return ctx
+    return f"{ctx}\n\n{block}\n"
+
+
 def _ceo_from_calc(calc: Dict[str, Any]) -> Dict[str, str]:
     t = calc.get("textos_abiertos") or {}
     return {"reto": t.get("qt1", ""), "fortaleza": t.get("qt2", ""), "vision": t.get("qt3", "")}
@@ -437,7 +444,7 @@ async def analizar_diagnostico_express(data: Dict[str, Any]) -> Dict[str, Any]:
         out["llm_mode"] = "fallback_sin_anthropic"
         return out
 
-    user_msg = _build_user_context(calc, resp)
+    user_msg = _append_nlp_block(_build_user_context(calc, resp), data)
 
     try:
         response = client.messages.create(

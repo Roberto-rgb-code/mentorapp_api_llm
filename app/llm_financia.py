@@ -137,8 +137,11 @@ async def analizar_diagnostico_financia(data: Dict[str, Any]) -> Dict[str, Any]:
 
 Ratios financieros calculados pre-procesados:
 {json.dumps(ratios_precalculados, indent=2, ensure_ascii=False)}
-
-Con base en la instrucción principal del Agente F.I.N.A.N.C.I.A., las reglas de decisión, y la base de conocimiento, genera el JSON del diagnóstico."""
+"""
+    nlp_block = (data.get("nlp_prompt_block") or "").strip()
+    if nlp_block:
+        user_msg += f"\n{nlp_block}\n"
+    user_msg += "\nCon base en la instrucción principal del Agente F.I.N.A.N.C.I.A., las reglas de decisión, y la base de conocimiento, genera el JSON del diagnóstico."
 
     try:
         response = client.messages.create(
