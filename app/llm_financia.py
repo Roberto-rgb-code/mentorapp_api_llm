@@ -8,10 +8,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")
-MODEL_NAME = os.getenv("ANTHROPIC_MODEL_NAME", "claude-3-5-sonnet-20241022").strip().strip('"').strip("'")
+MODEL_NAME = os.getenv("ANTHROPIC_MODEL_NAME", "claude-sonnet-4-5").strip().strip('"').strip("'")
 
 client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
+# Legacy full F.I.N.A.N.C.I.A. agent (kept for backwards compatibility)
 SYSTEM_PROMPT = """Eres el Agente F.I.N.A.N.C.I.A.™ de MentHIA, un mentor financiero virtual especializado en transformar PyMEs mexicanas desordenadas en empresas estructuradas, confiables y financiables. Combinas el rigor de un analista de crédito bancario con la cercanía de un mentor que entiende el desorden real de los negocios mexicanos.
 
 Tu tono es cercano pero profesional. Hablas de tú. Evitas tecnicismos innecesarios; cuando los usas, los traduces a lenguaje de empresario. Eres directo: dices lo que el dueño necesita oír, no lo que quiere oír. Empático con el caos operativo, pero firme con los números.
@@ -43,7 +44,7 @@ DEBES DEVOLVER ESTRICTAMENTE UN JSON QUE CUMPLA CON ESTA ESTRUCTURA DE OUTPUT:
   "scores": {
     "global": 0-100,
     "por_pilar": { "F_finanzas_claras": 0, "I_indicadores_control": 0, "N1_normalizacion_operativa": 0, "A1_administracion_estrategica": 0, "N2_negocio_financiable": 0, "C_credibilidad_financiera": 0, "I2_inteligencia_crecimiento": 0, "A2_acceso_capital": 0 },
-    "ratios_calculados": {"liquidez_corriente": 0, "prueba_acida": 0, ...},
+    "ratios_calculados": {"liquidez_corriente": 0, "prueba_acida": 0, "...": 0},
     "altman_z_score": {"valor": 0, "zona": "segura|gris|quiebra", "interpretacion": "..."}
   },
   "diagnostico_por_pilar": [ { "pilar": "Nombre", "score": 0, "fortalezas": [], "brechas": [], "red_flags_detectadas": [], "recomendaciones_priorizadas": [ {"accion": "", "impacto": "Alto|Medio|Bajo", "esfuerzo": "Alto|Medio|Bajo", "plazo": "Inmediato (<2 semanas)|..."} ] } ],
@@ -58,20 +59,25 @@ DEBES DEVOLVER ESTRICTAMENTE UN JSON QUE CUMPLA CON ESTA ESTRUCTURA DE OUTPUT:
 No agregues etiquetas ```json ni comentarios, solo el JSON puro.
 """
 
+EXPRESS_NARRATIVE_SYSTEM = """Eres el analista senior de MENTHIA Inteligencia Consultiva. Redactas la interpretación de un diagnóstico FINANCIA Express (Radiografía de Crecimiento Empresarial™) para el dueño de una PyME mexicana.
+REGLA INVIOLABLE (scoring inyectado, nunca juzgado): los números ya están calculados. NO inventes, recalcules ni cambies ninguna cifra, índice, clasificación ni el cuello de botella. Úsalos tal cual.
+Voz: cercana, profesional, directa, sin tecnicismos de banca. Principio rector: "el diagnóstico es el deber ser; el financiamiento es la consecuencia".
+Devuelve SOLO un JSON válido, sin markdown ni texto extra, con esta forma exacta:
+{"diagnostico":"2 a 3 frases que interpreten el resultado global y la situación declarada","cuello":"1 a 2 frases que expliquen por qué el cuello de botella es la prioridad #1, conectando con lo que el dueño escribió","recomendaciones":["acción 1","acción 2","acción 3"],"puente":"1 frase que invite a la Entrevista Estratégica de Bancabilidad sin sonar a venta dura"}"""
+
+
 def safe_float(val, default=0.0):
     try:
         return float(val)
-    except:
+    except Exception:
         return default
+
 
 def calcular_ratios_locales(datos_financieros: Dict[str, Any]) -> Dict[str, Any]:
     estados = datos_financieros.get("estados_financieros", [])
     if not estados:
         return {}
-    
-    # Tomamos el último estado financiero para ratios
     ultimo = estados[-1]
-    
     ingresos = safe_float(ultimo.get("ingresos", 0))
     costo_ventas = safe_float(ultimo.get("costo_ventas", 0))
     utilidad_neta = safe_float(ultimo.get("utilidad_neta", 0))
@@ -88,8 +94,7 @@ def calcular_ratios_locales(datos_financieros: Dict[str, Any]) -> Dict[str, Any]
     deuda_cp = safe_float(ultimo.get("deuda_bancaria_corto_plazo", 0))
     deuda_lp = safe_float(ultimo.get("deuda_bancaria_largo_plazo", 0))
 
-    ratios = {}
-    
+    ratios: Dict[str, Any] = {}
     ratios["liquidez_corriente"] = (activo_circulante / pasivo_circulante) if pasivo_circulante > 0 else 0
     ratios["prueba_acida"] = ((activo_circulante - inventarios) / pasivo_circulante) if pasivo_circulante > 0 else 0
     ratios["apalancamiento"] = (pasivo_total / capital_contable) if capital_contable > 0 else 0
@@ -103,35 +108,99 @@ def calcular_ratios_locales(datos_financieros: Dict[str, Any]) -> Dict[str, Any]
     ratios["DIO"] = (inventarios / costo_ventas * 365) if costo_ventas > 0 else 0
     ratios["DPO"] = (cuentas_por_pagar / costo_ventas * 365) if costo_ventas > 0 else 0
     ratios["ciclo_conversion_efectivo"] = ratios["DSO"] + ratios["DIO"] - ratios["DPO"]
-    
-    amortizacion_estimada = (deuda_cp + deuda_lp) / 3 # asumiendo 3 años
+    amortizacion_estimada = (deuda_cp + deuda_lp) / 3
     denominador_dscr = gastos_financieros + amortizacion_estimada
     ratios["DSCR"] = (ebitda / denominador_dscr) if denominador_dscr > 0 else 0
-    
     ratios["cobertura_intereses"] = (ebitda / gastos_financieros) if gastos_financieros > 0 else 0
-    
-    utilidades_retenidas = capital_contable # aprox
+    utilidades_retenidas = capital_contable
     X1 = (activo_circulante - pasivo_circulante) / activo_total if activo_total > 0 else 0
     X2 = utilidades_retenidas / activo_total if activo_total > 0 else 0
     X3 = ebitda / activo_total if activo_total > 0 else 0
     X4 = capital_contable / pasivo_total if pasivo_total > 0 else 0
     X5 = ingresos / activo_total if activo_total > 0 else 0
-    
     z_score = 0.717 * X1 + 0.847 * X2 + 3.107 * X3 + 0.420 * X4 + 0.998 * X5
     ratios["altman_z_score_privado"] = z_score
     ratios["altman_componentes"] = {"X1": X1, "X2": X2, "X3": X3, "X4": X4, "X5": X5}
-    
     return ratios
 
-async def analizar_diagnostico_financia(data: Dict[str, Any]) -> Dict[str, Any]:
+
+def _parse_json_text(content: str) -> Dict[str, Any]:
+    t = (content or "").strip()
+    if t.startswith("```json"):
+        t = t[7:]
+    if t.startswith("```"):
+        t = t[3:]
+    if t.endswith("```"):
+        t = t[:-3]
+    return json.loads(t.strip())
+
+
+async def _analizar_express_radiografia(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Narrativa únicamente; los scores ya vienen calculados (inyectados)."""
+    computed = data.get("computed") or {}
     if not ANTHROPIC_API_KEY or not client:
         raise HTTPException(status_code=500, detail="API Key de Anthropic no configurada.")
-    
+
+    index = computed.get("index")
+    tier = computed.get("tier") or {}
+    sub = computed.get("subindices") or {}
+    neck_name = computed.get("neckName") or computed.get("neck") or ""
+    lead = computed.get("lead") or {}
+    red_flags = computed.get("redFlags") or []
+
+    dim_list = "\n".join(f"- {k}: {v}/100" for k, v in sub.items())
+    red_list = (
+        "\n".join(
+            f"- [{f.get('dim')}] {f.get('text')} → \"{f.get('answer')}\""
+            for f in red_flags
+        )
+        if red_flags
+        else "Ninguno crítico."
+    )
+
+    user_msg = f"""DATOS YA CALCULADOS (no los modifiques):
+Empresa: {lead.get('empresa') or 'n/d'} | Giro: {lead.get('giro') or 'n/d'} | Empleados: {lead.get('empleados') or 'n/d'}
+Índice MENTHIA Express: {index}/100
+Clasificación: {tier.get('label')} ({tier.get('emoji') or ''})
+Sub-índices:
+{dim_list}
+Cuello de botella principal (prioridad #1): {neck_name}
+Situación declarada por el dueño: {computed.get('situation') or 'n/d'}
+Lo que más quiere resolver en 12 meses: "{computed.get('open') or 'no especificado'}"
+Riesgos críticos (respuestas en rojo):
+{red_list}
+"""
+    nlp_block = (data.get("nlp_prompt_block") or "").strip()
+    if nlp_block:
+        user_msg += f"\n{nlp_block}\n"
+    user_msg += "\nRedacta el JSON."
+
+    response = client.messages.create(
+        model=MODEL_NAME,
+        system=EXPRESS_NARRATIVE_SYSTEM,
+        max_tokens=1200,
+        temperature=0.4,
+        messages=[{"role": "user", "content": user_msg}],
+    )
+    content = (response.content[0].text or "{}").strip()
+    parsed = _parse_json_text(content)
+    if not parsed.get("diagnostico") or not isinstance(parsed.get("recomendaciones"), list):
+        raise HTTPException(status_code=500, detail="Narrativa Express inválida")
+    return parsed
+
+
+async def analizar_diagnostico_financia(data: Dict[str, Any]) -> Dict[str, Any]:
+    if data.get("mode") == "financia_express_radiografia" or data.get("scores_inyectados"):
+        return await _analizar_express_radiografia(data)
+
+    if not ANTHROPIC_API_KEY or not client:
+        raise HTTPException(status_code=500, detail="API Key de Anthropic no configurada.")
+
     print(f"[llm_financia] Analizando empresa con {MODEL_NAME}")
-    
+
     datos_financieros = data.get("datos_financieros", {})
     ratios_precalculados = calcular_ratios_locales(datos_financieros)
-    
+
     user_msg = f"""A continuación se presentan los datos crudos recolectados del usuario:
 {json.dumps(data, indent=2, ensure_ascii=False)}
 
@@ -149,16 +218,11 @@ Ratios financieros calculados pre-procesados:
             system=SYSTEM_PROMPT,
             max_tokens=8000,
             temperature=0.3,
-            messages=[{"role": "user", "content": user_msg}]
+            messages=[{"role": "user", "content": user_msg}],
         )
-        
+
         content = (response.content[0].text or "{}").strip()
-        if content.startswith("```json"): content = content[7:]
-        if content.startswith("```"): content = content[3:]
-        if content.endswith("```"): content = content[:-3]
-        
-        parsed = json.loads(content.strip())
-        return parsed
+        return _parse_json_text(content)
 
     except Exception as e:
         print(f"[llm_financia] ERROR: {e}")
